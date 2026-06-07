@@ -1,0 +1,341 @@
+.room-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.room-main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.room-canvas {
+  flex: 1;
+  position: relative;
+  background: radial-gradient(ellipse at center, rgba(102, 126, 234, 0.1) 0%, transparent 70%);
+  overflow: hidden;
+}
+
+.room-canvas::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: 
+    radial-gradient(circle at 20% 30%, rgba(102, 126, 234, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 80% 70%, rgba(118, 75, 162, 0.1) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+.grid-floor {
+  position: absolute;
+  top: 200px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
+  transform: perspective(600px) rotateX(60deg);
+  transform-origin: top center;
+}
+
+.seat-row {
+  display: flex;
+  justify-content: center;
+  gap: 30px;
+  margin-bottom: 24px;
+  position: relative;
+  z-index: 1;
+}
+
+.seat {
+  width: 80px;
+  text-align: center;
+  cursor: pointer;
+  transition: transform 0.3s;
+  position: relative;
+}
+
+.seat:hover {
+  transform: scale(1.1);
+}
+
+.seat-avatar {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  margin: 0 auto 8px;
+  position: relative;
+}
+
+.seat.online .seat-avatar {
+  background: rgba(102, 126, 234, 0.2);
+  border-color: #667eea;
+  box-shadow: 0 0 20px rgba(102, 126, 234, 0.3);
+}
+
+.seat.host .seat-avatar {
+  background: rgba(245, 87, 108, 0.2);
+  border-color: #f5576c;
+  box-shadow: 0 0 20px rgba(245, 87, 108, 0.3);
+}
+
+.seat-name {
+  font-size: 12px;
+  color: #ccc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.seat.muted .seat-avatar::after {
+  content: '🔇';
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  font-size: 14px;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.group-label {
+  position: absolute;
+  top: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  color: #888;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.stage-area {
+  text-align: center;
+  padding: 30px 0;
+  margin-bottom: 40px;
+  position: relative;
+  z-index: 2;
+}
+
+.stage-area .host-display {
+  display: inline-block;
+}
+
+.stage-area .host-display .seat-avatar {
+  width: 100px;
+  height: 100px;
+  font-size: 48px;
+}
+
+.stage-area .host-display .seat-name {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.room-sidebar {
+  width: 300px;
+  background: rgba(255, 255, 255, 0.03);
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-tabs {
+  display: flex;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.sidebar-tab {
+  flex: 1;
+  padding: 14px;
+  text-align: center;
+  cursor: pointer;
+  font-size: 13px;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.sidebar-tab:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.sidebar-tab.active {
+  border-bottom-color: #667eea;
+  color: #667eea;
+}
+
+.sidebar-content {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.participant-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  margin-bottom: 6px;
+  transition: background 0.2s;
+}
+
+.participant-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.participant-item .avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.participant-item.online .avatar {
+  background: rgba(102, 126, 234, 0.2);
+  border: 1px solid #667eea;
+}
+
+.participant-item .info {
+  flex: 1;
+  min-width: 0;
+}
+
+.participant-item .name {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.participant-item .group {
+  font-size: 11px;
+  color: #888;
+  margin-top: 2px;
+}
+
+.participant-item .actions {
+  display: flex;
+  gap: 4px;
+}
+
+.action-icon-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.action-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.action-icon-btn.muted {
+  background: rgba(245, 87, 108, 0.3);
+}
+
+.room-toolbar {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  padding: 16px 20px;
+  background: rgba(255, 255, 255, 0.03);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.tool-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 70px;
+}
+
+.tool-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  transform: translateY(-2px);
+}
+
+.tool-btn.active {
+  background: rgba(102, 126, 234, 0.3);
+  border: 1px solid #667eea;
+}
+
+.tool-btn.danger {
+  background: rgba(245, 87, 108, 0.2);
+}
+
+.tool-btn.danger:hover {
+  background: rgba(245, 87, 108, 0.4);
+}
+
+.tool-btn .icon {
+  font-size: 22px;
+}
+
+.tool-btn .label {
+  font-size: 12px;
+}
+
+.quick-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.quick-action-btn {
+  flex: 1;
+  min-width: calc(50% - 4px);
+  padding: 10px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.quick-action-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+}

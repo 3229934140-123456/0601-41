@@ -1,0 +1,323 @@
+.recording-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.recording-main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.recording-content {
+  flex: 1;
+  padding: 30px;
+  overflow-y: auto;
+}
+
+.recording-sidebar {
+  width: 320px;
+  background: rgba(255, 255, 255, 0.03);
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.status-section {
+  text-align: center;
+  padding: 30px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 16px;
+  margin-bottom: 24px;
+}
+
+.recording-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  background: rgba(235, 51, 73, 0.2);
+  border-radius: 30px;
+  margin-bottom: 16px;
+}
+
+.recording-dot {
+  width: 12px;
+  height: 12px;
+  background: #eb3349;
+  border-radius: 50%;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.recording-indicator span {
+  color: #eb3349;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.recording-indicator.stopped {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.recording-indicator.stopped .recording-dot {
+  background: #888;
+  animation: none;
+}
+
+.recording-indicator.stopped span {
+  color: #888;
+}
+
+.recording-time {
+  font-size: 48px;
+  font-weight: 300;
+  letter-spacing: 2px;
+  margin-bottom: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.recording-time-label {
+  font-size: 13px;
+  color: #888;
+  margin-bottom: 20px;
+}
+
+.record-controls {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+}
+
+.record-btn {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s;
+}
+
+.record-btn.start {
+  background: linear-gradient(135deg, #eb3349, #f45c43);
+  color: white;
+  box-shadow: 0 6px 20px rgba(235, 51, 73, 0.4);
+}
+
+.record-btn.start:hover {
+  transform: scale(1.1);
+  box-shadow: 0 8px 30px rgba(235, 51, 73, 0.5);
+}
+
+.record-btn.stop {
+  background: linear-gradient(135deg, #434343, #8e9eab);
+  color: white;
+}
+
+.record-btn.stop:hover {
+  transform: scale(1.1);
+}
+
+.record-btn.secondary {
+  width: 52px;
+  height: 52px;
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  font-size: 20px;
+}
+
+.record-btn.secondary:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.bgm-section {
+  margin-bottom: 24px;
+}
+
+.bgm-section h3 {
+  font-size: 16px;
+  margin-bottom: 14px;
+  color: #ddd;
+}
+
+.bgm-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.bgm-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.bgm-item.playing {
+  background: rgba(102, 126, 234, 0.2);
+  border: 1px solid #667eea;
+}
+
+.bgm-item .icon {
+  font-size: 20px;
+}
+
+.bgm-item .info {
+  flex: 1;
+}
+
+.bgm-item .name {
+  font-size: 14px;
+}
+
+.bgm-item .duration {
+  font-size: 11px;
+  color: #888;
+}
+
+.bgm-item .play-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.volume-control {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  margin-top: 12px;
+}
+
+.volume-icon {
+  font-size: 18px;
+}
+
+.volume-slider {
+  flex: 1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+  position: relative;
+  cursor: pointer;
+}
+
+.volume-fill {
+  height: 100%;
+  background: #667eea;
+  border-radius: 3px;
+}
+
+.recordings-list-section h3 {
+  font-size: 16px;
+  margin-bottom: 14px;
+  color: #ddd;
+}
+
+.recording-item {
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  margin-bottom: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.2s;
+}
+
+.recording-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.recording-item .name {
+  font-size: 15px;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.recording-item .meta {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: #888;
+}
+
+.recording-item .actions {
+  display: flex;
+  gap: 8px;
+}
+
+.recording-item .actions button {
+  flex: 1;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.export-section {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.export-section h3 {
+  font-size: 16px;
+  margin-bottom: 14px;
+  color: #ddd;
+}
+
+.export-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.export-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.export-option:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.export-option .icon {
+  font-size: 24px;
+}
+
+.export-option .info {
+  flex: 1;
+}
+
+.export-option .title {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.export-option .desc {
+  font-size: 11px;
+  color: #888;
+}
