@@ -9,6 +9,7 @@ export interface Participant {
   joinTime: string;
   connectionStatus: 'good' | 'warning' | 'bad';
   role: 'participant' | 'cohost' | 'host';
+  totalOnlineSeconds: number;
 }
 
 export interface Room {
@@ -153,14 +154,14 @@ export const initialState: AppState = {
   ],
   currentUser: { id: 'u001', name: '组织者', role: 'host', avatar: '👨‍💼' },
   participants: [
-    { id: 'p1', name: '张三', avatar: '👨', seat: 1, muted: false, online: true, group: '一组', joinTime: '14:00', connectionStatus: 'good', role: 'participant' },
-    { id: 'p2', name: '李四', avatar: '👩', seat: 2, muted: true, online: true, group: '一组', joinTime: '14:02', connectionStatus: 'good', role: 'participant' },
-    { id: 'p3', name: '王五', avatar: '🧑', seat: 3, muted: false, online: true, group: '二组', joinTime: '14:05', connectionStatus: 'warning', role: 'participant' },
-    { id: 'p4', name: '赵六', avatar: '👨‍🦱', seat: 4, muted: true, online: true, group: '二组', joinTime: '14:10', connectionStatus: 'good', role: 'participant' },
-    { id: 'p5', name: '钱七', avatar: '👩‍🦰', seat: 5, muted: false, online: true, group: '三组', joinTime: '14:08', connectionStatus: 'bad', role: 'participant' },
-    { id: 'p6', name: '孙八', avatar: '🧔', seat: 6, muted: true, online: false, group: '三组', joinTime: '14:15', connectionStatus: 'good', role: 'participant' },
-    { id: 'p7', name: '周九', avatar: '👴', seat: 7, muted: false, online: true, group: '一组', joinTime: '14:20', connectionStatus: 'good', role: 'participant' },
-    { id: 'p8', name: '吴十', avatar: '👵', seat: 8, muted: true, online: true, group: '二组', joinTime: '14:25', connectionStatus: 'warning', role: 'participant' },
+    { id: 'p1', name: '张三', avatar: '👨', seat: 1, muted: false, online: true, group: '一组', joinTime: '14:00', connectionStatus: 'good', role: 'participant', totalOnlineSeconds: 2023 },
+    { id: 'p2', name: '李四', avatar: '👩', seat: 2, muted: true, online: true, group: '一组', joinTime: '14:02', connectionStatus: 'good', role: 'participant', totalOnlineSeconds: 1897 },
+    { id: 'p3', name: '王五', avatar: '🧑', seat: 3, muted: false, online: true, group: '二组', joinTime: '14:05', connectionStatus: 'warning', role: 'participant', totalOnlineSeconds: 1654 },
+    { id: 'p4', name: '赵六', avatar: '👨‍🦱', seat: 4, muted: true, online: true, group: '二组', joinTime: '14:10', connectionStatus: 'good', role: 'participant', totalOnlineSeconds: 1423 },
+    { id: 'p5', name: '钱七', avatar: '👩‍🦰', seat: 5, muted: false, online: true, group: '三组', joinTime: '14:08', connectionStatus: 'bad', role: 'participant', totalOnlineSeconds: 1512 },
+    { id: 'p6', name: '孙八', avatar: '🧔', seat: 6, muted: true, online: false, group: '三组', joinTime: '14:15', connectionStatus: 'good', role: 'participant', totalOnlineSeconds: 580 },
+    { id: 'p7', name: '周九', avatar: '👴', seat: 7, muted: false, online: true, group: '一组', joinTime: '14:20', connectionStatus: 'good', role: 'participant', totalOnlineSeconds: 745 },
+    { id: 'p8', name: '吴十', avatar: '👵', seat: 8, muted: true, online: true, group: '二组', joinTime: '14:25', connectionStatus: 'warning', role: 'participant', totalOnlineSeconds: 432 },
   ],
   currentRoom: null,
   recordings: [

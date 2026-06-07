@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { 
   useParticipants, 
   useRooms, 
+  useCurrentRoom,
   useGroupsWithColors, 
   storeActions, 
   getAvatarColor,
@@ -11,6 +12,7 @@ import {
 const ManagementApp: React.FC = () => {
   const participants = useParticipants();
   const rooms = useRooms();
+  const room = useCurrentRoom();
   const groups = useGroupsWithColors();
   const [activeTab, setActiveTab] = useState('participants');
   const [searchQuery, setSearchQuery] = useState('');
@@ -58,6 +60,38 @@ const ManagementApp: React.FC = () => {
 
   const changeGroup = (id: string, group: string) => {
     storeActions.changeGroup(id, group);
+  };
+
+  const isGroupDiscussionMode = (groupName: string): boolean => {
+    if (!room || !room.groupTasks) return false;
+    return room.groupTasks[`discussion_${groupName}`] === 'true';
+  };
+
+  const getGroupTask = (groupName: string): string => {
+    if (!room || !room.groupTasks) return '';
+    return room.groupTasks[groupName] || '';
+  };
+
+  const toggleDiscussionMode = (groupName: string) => {
+    if (!room) return;
+    const isDiscussing = isGroupDiscussionMode(groupName);
+    storeActions.setDiscussionMode(room.id, groupName, !isDiscussing);
+  };
+
+  const [taskModalGroup, setTaskModalGroup] = useState('');
+  const [taskModalContent, setTaskModalContent] = useState('');
+  const [showTaskModal, setShowTaskModal] = useState(false);
+
+  const openTaskModal = (groupName: string) => {
+    setTaskModalGroup(groupName);
+    setTaskModalContent(getGroupTask(groupName));
+    setShowTaskModal(true);
+  };
+
+  const saveTask = () => {
+    if (!room || !taskModalGroup) return;
+    storeActions.setGroupTask(room.id, taskModalGroup, taskModalContent);
+    setShowTaskModal(false);
   };
 
   const stats = {
@@ -267,38 +301,85 @@ const ManagementApp: React.FC = () => {
 
           {activeTab === 'groups' && (
             <div className="tab-content">
-              <div className="groups-list">
-                {groups.map(group => {
-                  const groupMembers = participants.filter(p => p.group === group.name);
-                  return (
-                    <div key={group.id} className="group-card">
-                      <div className="group-header">
-                        <div 
-                          className="group-color-indicator"
-                          style={{ backgroundColor: group.color }}
-                        ></div>
-                        <h3 style={{ color: group.color }}>{group.name}</h3>
-                        <span className="group-count">{groupMembers.length} 人</span>
-                      </div>
-                      
-                      <div className="group-members">
-                        {groupMembers.map(m => (
-                          <div key={m.id} className="group-member">
-                            <div className="avatar-sm" style={{ backgroundColor: getAvatarColor(m.name) }}>
-                              {m.name[0]}
-                            </div>
-                            <span className="name">{m.name}</span>
-                            <span className={`status-dot ${m.online ? 'online' : 'offline'}`}></span>
+              {!room && (
+                <div className="empty-state">
+                  <div className="icon">🏠</div>
+                  <p>请先进入一个房间查看分组管理</p>
+                </div>
+              )}
+              {room && (
+                <div className="groups-list">
+                  {groups.map(group => {
+                    const groupMembers = participants.filter(p => p.group === group.name);
+                    const isDiscussing = isGroupDiscussionMode(group.name);
+                    const task = getGroupTask(group.name);
+                    return (
+                      <div 
+                        key={group.id} 
+                        className={`group-card ${isDiscussing ? 'discussion-active' : ''}`}
+                      >
+                        <div className="group-header">
+                          <div 
+                            className="group-color-indicator"
+                            style={{ backgroundColor: group.color }}
+                          ></div>
+                          <h3 style={{ color: group.color }}>
+                            {isDiscussing && <span style={{ marginRight: '6px' }}>💬</span>}
+                            {group.name}
+                          </h3>
+                          <span className="group-count">{groupMembers.length} 人</span>
+                        </div>
+
+                        {isDiscussing && (
+                          <div className="group-discussion-badge">
+                            💬 讨论模式进行中
                           </div>
-                        ))}
-                        {groupMembers.length === 0 && (
-                          <div className="empty-small">暂无成员</div>
                         )}
+
+                        {task && (
+                          <div className="group-task-info">
+                            <span className="task-label">📋 当前任务</span>
+                            <p className="task-content">{task}</p>
+                          </div>
+                        )}
+                        
+                        <div className="group-members">
+                          {groupMembers.map(m => (
+                            <div key={m.id} className="group-member">
+                              <div className="avatar-sm" style={{ backgroundColor: getAvatarColor(m.name) }}>
+                                {m.name[0]}
+                              </div>
+                              <span className="name">{m.name}</span>
+                              {m.role === 'cohost' && (
+                                <span style={{ fontSize: '10px', color: '#ffb957' }}>👑</span>
+                              )}
+                              <span className={`status-dot ${m.online ? 'online' : 'offline'}`}></span>
+                            </div>
+                          ))}
+                          {groupMembers.length === 0 && (
+                            <div className="empty-small">暂无成员</div>
+                          )}
+                        </div>
+
+                        <div className="group-actions">
+                          <button 
+                            className={`mini-btn ${isDiscussing ? 'primary' : ''}`}
+                            onClick={() => toggleDiscussionMode(group.name)}
+                          >
+                            {isDiscussing ? '🔕 结束讨论' : '💬 开启讨论'}
+                          </button>
+                          <button 
+                            className="mini-btn"
+                            onClick={() => openTaskModal(group.name)}
+                          >
+                            📝 {task ? '修改任务' : '下发任务'}
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -390,6 +471,38 @@ const ManagementApp: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {showTaskModal && (
+        <div className="modal-overlay" onClick={() => setShowTaskModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h2>设置分组任务</h2>
+            <div className="form-group">
+              <label>目标分组</label>
+              <div style={{ 
+                padding: '10px 14px',
+                background: 'rgba(255, 255, 255, 0.05)',
+                borderRadius: '8px',
+                fontSize: '14px',
+              }}>
+                {taskModalGroup}
+              </div>
+            </div>
+            <div className="form-group">
+              <label>任务内容</label>
+              <textarea
+                placeholder="请输入任务内容..."
+                value={taskModalContent}
+                onChange={e => setTaskModalContent(e.target.value)}
+                style={{ minHeight: '100px', resize: 'vertical' }}
+              />
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-secondary" onClick={() => setShowTaskModal(false)}>取消</button>
+              <button className="btn btn-primary" onClick={saveTask}>保存</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

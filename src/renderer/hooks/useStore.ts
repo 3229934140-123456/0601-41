@@ -12,6 +12,7 @@ export interface Participant {
   joinTime: string;
   connectionStatus: 'good' | 'warning' | 'bad';
   role: 'participant' | 'cohost' | 'host';
+  totalOnlineSeconds?: number;
 }
 
 export interface Room {
@@ -109,6 +110,55 @@ export function getGroupNum(group: string): number {
   return match ? parseInt(match[1]) : 1;
 }
 
+export function getRoomStatus(room: Room): 'active' | 'inactive' | 'ended' {
+  if (!room.startTime || !room.endTime) {
+    return room.status === 'active' || room.status === '进行中' ? 'active' 
+      : room.status === 'ended' ? 'ended' : 'inactive';
+  }
+
+  const now = new Date().getTime();
+  const startTime = new Date(room.startTime.replace(' ', 'T')).getTime();
+  const endTime = new Date(room.endTime.replace(' ', 'T')).getTime();
+
+  if (now < startTime) {
+    return 'inactive';
+  } else if (now >= startTime && now <= endTime) {
+    return 'active';
+  } else {
+    return 'ended';
+  }
+}
+
+export function getRoomStatusText(room: Room): string {
+  const status = getRoomStatus(room);
+  if (status === 'active') return '进行中';
+  if (status === 'ended') return '已结束';
+  return '未开始';
+}
+
+export function getRoomStatusClass(room: Room): string {
+  const status = getRoomStatus(room);
+  if (status === 'active') return 'status-active';
+  if (status === 'ended') return 'status-ended';
+  return 'status-inactive';
+}
+
+export function formatDuration(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}分${secs}秒`;
+}
+
+export function formatDurationShort(seconds: number): string {
+  const hours = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  if (hours > 0) {
+    return `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
 const defaultState: AppState = {
   rooms: [
     { 
@@ -186,14 +236,14 @@ const defaultState: AppState = {
   ],
   currentUser: { id: 'u001', name: '组织者', role: 'host', avatar: '👨‍💼' },
   participants: [
-    { id: 'p1', name: '张三', avatar: '👨', seat: 1, muted: false, online: true, group: '一组', joinTime: '14:00', connectionStatus: 'good', role: 'participant' },
-    { id: 'p2', name: '李四', avatar: '👩', seat: 2, muted: true, online: true, group: '一组', joinTime: '14:02', connectionStatus: 'good', role: 'participant' },
-    { id: 'p3', name: '王五', avatar: '🧑', seat: 3, muted: false, online: true, group: '二组', joinTime: '14:05', connectionStatus: 'warning', role: 'participant' },
-    { id: 'p4', name: '赵六', avatar: '👨‍🦱', seat: 4, muted: true, online: true, group: '二组', joinTime: '14:10', connectionStatus: 'good', role: 'participant' },
-    { id: 'p5', name: '钱七', avatar: '👩‍🦰', seat: 5, muted: false, online: true, group: '三组', joinTime: '14:08', connectionStatus: 'bad', role: 'participant' },
-    { id: 'p6', name: '孙八', avatar: '🧔', seat: 6, muted: true, online: false, group: '三组', joinTime: '14:15', connectionStatus: 'good', role: 'participant' },
-    { id: 'p7', name: '周九', avatar: '👴', seat: 7, muted: false, online: true, group: '一组', joinTime: '14:20', connectionStatus: 'good', role: 'participant' },
-    { id: 'p8', name: '吴十', avatar: '👵', seat: 8, muted: true, online: true, group: '二组', joinTime: '14:25', connectionStatus: 'warning', role: 'participant' },
+    { id: 'p1', name: '张三', avatar: '👨', seat: 1, muted: false, online: true, group: '一组', joinTime: '14:00', connectionStatus: 'good', role: 'participant', totalOnlineSeconds: 2023 },
+    { id: 'p2', name: '李四', avatar: '👩', seat: 2, muted: true, online: true, group: '一组', joinTime: '14:02', connectionStatus: 'good', role: 'participant', totalOnlineSeconds: 1897 },
+    { id: 'p3', name: '王五', avatar: '🧑', seat: 3, muted: false, online: true, group: '二组', joinTime: '14:05', connectionStatus: 'warning', role: 'participant', totalOnlineSeconds: 1654 },
+    { id: 'p4', name: '赵六', avatar: '👨‍🦱', seat: 4, muted: true, online: true, group: '二组', joinTime: '14:10', connectionStatus: 'good', role: 'participant', totalOnlineSeconds: 1423 },
+    { id: 'p5', name: '钱七', avatar: '👩‍🦰', seat: 5, muted: false, online: true, group: '三组', joinTime: '14:08', connectionStatus: 'bad', role: 'participant', totalOnlineSeconds: 1512 },
+    { id: 'p6', name: '孙八', avatar: '🧔', seat: 6, muted: true, online: false, group: '三组', joinTime: '14:15', connectionStatus: 'good', role: 'participant', totalOnlineSeconds: 580 },
+    { id: 'p7', name: '周九', avatar: '👴', seat: 7, muted: false, online: true, group: '一组', joinTime: '14:20', connectionStatus: 'good', role: 'participant', totalOnlineSeconds: 745 },
+    { id: 'p8', name: '吴十', avatar: '👵', seat: 8, muted: true, online: true, group: '二组', joinTime: '14:25', connectionStatus: 'warning', role: 'participant', totalOnlineSeconds: 432 },
   ],
   currentRoom: null,
   recordings: [

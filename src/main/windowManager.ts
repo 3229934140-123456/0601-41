@@ -36,6 +36,61 @@ export function createWindowManager() {
     });
   }
 
+  function calculateRoomStatus(room: Room): string {
+    if (!room.startTime || !room.endTime) {
+      return room.status;
+    }
+
+    const now = new Date().getTime();
+    const startTime = new Date(room.startTime.replace(' ', 'T')).getTime();
+    const endTime = new Date(room.endTime.replace(' ', 'T')).getTime();
+
+    if (now < startTime) {
+      return 'inactive';
+    } else if (now >= startTime && now <= endTime) {
+      return 'active';
+    } else {
+      return 'ended';
+    }
+  }
+
+  function updateAllRoomStatuses() {
+    let changed = false;
+    state.rooms.forEach((room: Room) => {
+      if (room.startTime && room.endTime) {
+        const newStatus = calculateRoomStatus(room);
+        if (room.status !== newStatus) {
+          room.status = newStatus;
+          changed = true;
+        }
+      }
+    });
+    if (changed) {
+      if (state.currentRoom) {
+        const updated = state.rooms.find((r: Room) => r.id === state.currentRoom!.id);
+        if (updated) {
+          state.currentRoom = { ...updated };
+        }
+      }
+      broadcastState();
+    }
+  }
+
+  setInterval(updateAllRoomStatuses, 60000);
+
+  setInterval(() => {
+    let changed = false;
+    state.participants.forEach((p: Participant) => {
+      if (p.online) {
+        p.totalOnlineSeconds += 10;
+        changed = true;
+      }
+    });
+    if (changed) {
+      broadcastState();
+    }
+  }, 10000);
+
   function createWindow(name: string, data?: any): BrowserWindow {
     const config = windowConfigs[name];
     if (!config) throw new Error(`Unknown window: ${name}`);
@@ -92,7 +147,8 @@ export function createWindowManager() {
       group: participant.group || '一组',
       joinTime: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
       connectionStatus: 'good',
-      role: 'participant',
+      role: participant.role || 'participant',
+      totalOnlineSeconds: 0,
     };
     state.participants.push(newParticipant);
     broadcastState();
@@ -185,9 +241,15 @@ export function createWindowManager() {
       capacity: room.capacity || 30,
       online: 0,
       participantCount: 0,
-      status: '未开始',
+      status: 'inactive',
       host: state.currentUser.name,
       permission: room.permission || 'invite',
+      startTime: room.startTime || '',
+      endTime: room.endTime || '',
+      topic: room.topic || '',
+      notes: room.notes || '',
+      groupTasks: {},
+      discussionMode: false,
     };
     state.rooms.push(newRoom);
     broadcastState();
@@ -362,20 +424,34 @@ export function createWindowManager() {
   function formatDuration(seconds: number): string {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
+    if (mins >= 60) {
+      const hours = Math.floor(mins / 60);
+      const remainMins = mins % 60;
+      return `${hours}小时${remainMins}分${secs}秒`;
+    }
+    return `${mins}分${secs}秒`;
+  }
+
+  function formatDurationMinutes(seconds: number): string {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
     return `${mins}分${secs}秒`;
   }
 
   function exportReviewCSV(filePath: string, filter?: { search?: string; group?: string }): boolean {
     try {
-      let participants = [...state.participants];
+      let filteredParticipants = [...state.participants];
       
       if (filter?.search) {
         const search = filter.search.toLowerCase();
-        participants = participants.filter(p => p.name.toLowerCase().includes(search));
+        filteredParticipants = filteredParticipants.filter(p => p.name.toLowerCase().includes(search));
       }
       if (filter?.group && filter.group !== 'all') {
-        participants = participants.filter(p => p.group === filter.group);
+        filteredParticipants = filteredParticipants.filter(p => p.group === filter.group);
       }
+
+      const participantNames = new Set(filteredParticipants.map(p => p.name));
+      const filteredHandRaises = state.activities.handRaises.filter((h: any) => participantNames.has(h.name));
 
       const headers = [
         '序号', '姓名', '分组', '角色', '座位号', '在线状态', 
@@ -383,11 +459,10 @@ export function createWindowManager() {
         '任务完成', '连接状态', '麦克风'
       ];
       
-      const rows = participants.map((p, index) => {
+      const rows = filteredParticipants.map((p, index) => {
         const handRaiseCount = state.activities.handRaises.filter((h: any) => h.name === p.name).length;
         const taskCompleted = state.activities.tasks.filter((t: any) => t.status === 'completed').length;
         const totalTasks = state.activities.tasks.length;
-        const onlineMinutes = Math.floor(Math.random() * 120) + 10;
         
         return [
           (index + 1).toString(),
@@ -397,7 +472,7 @@ export function createWindowManager() {
           p.seat.toString(),
           p.online ? '在线' : '离线',
           p.joinTime,
-          `${onlineMinutes}分钟`,
+          formatDurationMinutes(p.totalOnlineSeconds || 0),
           handRaiseCount.toString(),
           state.activities.votes.length > 0 ? '已参与' : '未发起',
           `${taskCompleted}/${totalTasks}`,
@@ -423,15 +498,18 @@ export function createWindowManager() {
 
   function exportReviewText(filePath: string, filter?: { search?: string; group?: string }): boolean {
     try {
-      let participants = [...state.participants];
+      let filteredParticipants = [...state.participants];
       
       if (filter?.search) {
         const search = filter.search.toLowerCase();
-        participants = participants.filter(p => p.name.toLowerCase().includes(search));
+        filteredParticipants = filteredParticipants.filter(p => p.name.toLowerCase().includes(search));
       }
       if (filter?.group && filter.group !== 'all') {
-        participants = participants.filter(p => p.group === filter.group);
+        filteredParticipants = filteredParticipants.filter(p => p.group === filter.group);
       }
+
+      const participantNames = new Set(filteredParticipants.map(p => p.name));
+      const filteredHandRaises = state.activities.handRaises.filter((h: any) => participantNames.has(h.name));
 
       const totalRecordingSeconds = state.recordings.reduce((acc: number, r: any) => acc + r.durationSeconds, 0);
       const completedTasks = state.activities.tasks.filter((t: any) => t.status === 'completed').length;
@@ -442,11 +520,14 @@ export function createWindowManager() {
       lines.push('='.repeat(60));
       lines.push('');
       lines.push(`生成时间: ${new Date().toLocaleString('zh-CN')}`);
-      lines.push(`参会人数: ${participants.length} 人`);
-      lines.push(`在线人数: ${participants.filter(p => p.online).length} 人`);
+      if (filter?.search || filter?.group) {
+        lines.push(`筛选条件: ${filter.group && filter.group !== 'all' ? `分组=${filter.group} ` : ''}${filter.search ? `关键词="${filter.search}"` : ''}`);
+      }
+      lines.push(`参会人数: ${filteredParticipants.length} 人`);
+      lines.push(`在线人数: ${filteredParticipants.filter(p => p.online).length} 人`);
       lines.push(`录制片段: ${state.recordings.length} 个`);
       lines.push(`总录制时长: ${formatDuration(totalRecordingSeconds)}`);
-      lines.push(`举手次数: ${state.activities.handRaises.length} 次`);
+      lines.push(`举手次数: ${filteredHandRaises.length} 次`);
       lines.push(`投票数: ${state.activities.votes.length} 个`);
       lines.push(`闯关任务: ${completedTasks}/${state.activities.tasks.length} 完成`);
       lines.push('');
@@ -455,12 +536,11 @@ export function createWindowManager() {
       lines.push('一、参会人员详情');
       lines.push('');
       
-      participants.forEach((p, index) => {
+      filteredParticipants.forEach((p, index) => {
         const handRaiseCount = state.activities.handRaises.filter((h: any) => h.name === p.name).length;
-        const onlineMinutes = Math.floor(Math.random() * 120) + 10;
         lines.push(`${index + 1}. ${p.name}`);
         lines.push(`   分组: ${p.group} | 角色: ${p.role === 'host' ? '主持人' : p.role === 'cohost' ? '联席主持' : '参会者'} | 座位: ${p.seat}号`);
-        lines.push(`   状态: ${p.online ? '在线' : '离线'} | 加入时间: ${p.joinTime} | 在线时长: ${onlineMinutes}分钟`);
+        lines.push(`   状态: ${p.online ? '在线' : '离线'} | 加入时间: ${p.joinTime} | 在线时长: ${formatDurationMinutes(p.totalOnlineSeconds || 0)}`);
         lines.push(`   举手: ${handRaiseCount}次 | 麦克风: ${p.muted ? '静音' : '开启'} | 连接: ${p.connectionStatus === 'good' ? '良好' : p.connectionStatus === 'warning' ? '一般' : '较差'}`);
         lines.push('');
       });

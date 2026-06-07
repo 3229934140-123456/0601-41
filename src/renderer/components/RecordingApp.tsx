@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { useRecordings, useParticipants, useActivities, useGroups, storeActions, getAvatarColor } from '../hooks/useStore';
+import { useRecordings, useParticipants, useActivities, useGroups, storeActions, getAvatarColor, formatDuration } from '../hooks/useStore';
 
 const RecordingApp: React.FC = () => {
   const recordings = useRecordings();
@@ -284,6 +284,16 @@ const RecordingApp: React.FC = () => {
     }
     return result;
   }, [participants, reviewFilter]);
+
+  const filteredHandRaises = useMemo(() => {
+    const names = new Set(filteredReviewParticipants.map(p => p.name));
+    return activities.handRaises.filter(h => names.has(h.name));
+  }, [activities.handRaises, filteredReviewParticipants]);
+
+  const totalOnlineSeconds = useMemo(() => 
+    filteredReviewParticipants.reduce((acc, p) => acc + (p.totalOnlineSeconds || 0), 0),
+    [filteredReviewParticipants]
+  );
 
   const totalRecordingSeconds = useMemo(() => 
     recordings.reduce((acc, r) => acc + r.durationSeconds, 0), 
@@ -586,14 +596,14 @@ const RecordingApp: React.FC = () => {
                 <div className="summary-item">
                   <div className="summary-icon">⏱️</div>
                   <div>
-                    <div className="summary-value">{formatDuration(totalRecordingSeconds)}</div>
-                    <div className="summary-label">总录制时长</div>
+                    <div className="summary-value">{formatDuration(totalOnlineSeconds)}</div>
+                    <div className="summary-label">累计在线</div>
                   </div>
                 </div>
                 <div className="summary-item">
                   <div className="summary-icon">✋</div>
                   <div>
-                    <div className="summary-value">{activities.handRaises.length}</div>
+                    <div className="summary-value">{filteredHandRaises.length}</div>
                     <div className="summary-label">举手次数</div>
                   </div>
                 </div>
@@ -651,6 +661,10 @@ const RecordingApp: React.FC = () => {
                         </div>
                       </div>
                       <div className="review-stats">
+                        <div className="review-stat">
+                          <span className="stat-num">{formatDuration(p.totalOnlineSeconds || 0)}</span>
+                          <span className="stat-label">在线时长</span>
+                        </div>
                         <div className="review-stat">
                           <span className="stat-num">{handRaiseCount}</span>
                           <span className="stat-label">举手</span>

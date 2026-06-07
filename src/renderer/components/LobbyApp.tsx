@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { useRooms, useCurrentRoom, storeActions, Room } from '../hooks/useStore';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useRooms, useCurrentRoom, storeActions, Room, getRoomStatus, getRoomStatusText, getRoomStatusClass } from '../hooks/useStore';
 
 const LobbyApp: React.FC = () => {
   const rooms = useRooms();
@@ -7,6 +7,7 @@ const LobbyApp: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [viewMode, setViewMode] = useState<'card' | 'schedule'>('card');
   const [scheduleFilter, setScheduleFilter] = useState<'today' | 'week' | 'all'>('today');
+  const [, forceUpdate] = useState(0);
   
   const [newRoom, setNewRoom] = useState({
     name: '',
@@ -28,18 +29,15 @@ const LobbyApp: React.FC = () => {
     { name: '温馨橙', class: 'theme-orange', color: '#f5576c' },
   ];
 
-  const getStatusText = (room: Room) => {
-    if (room.status === 'ended') return '已结束';
-    if (room.status === 'active' || room.status === '进行中') return '进行中';
-    if (room.status === 'inactive' || room.status === '未开始') return '未开始';
-    return room.status;
-  };
+  useEffect(() => {
+    const timer = setInterval(() => {
+      forceUpdate(prev => prev + 1);
+    }, 60000);
+    return () => clearInterval(timer);
+  }, []);
 
-  const getStatusClass = (room: Room) => {
-    if (room.status === 'ended') return 'status-ended';
-    if (room.status === 'active' || room.status === '进行中') return 'status-active';
-    return 'status-inactive';
-  };
+  const getStatusText = (room: Room) => getRoomStatusText(room);
+  const getStatusClass = (room: Room) => getRoomStatusClass(room);
 
   const getThemeBg = (theme: string) => {
     if (theme.startsWith('linear-gradient')) return theme;
@@ -74,11 +72,11 @@ const LobbyApp: React.FC = () => {
     let result = rooms;
     
     if (filter === 'active') {
-      result = result.filter(r => r.status === 'active' || r.status === '进行中');
+      result = result.filter(r => getRoomStatus(r) === 'active');
     } else if (filter === 'scheduled') {
-      result = result.filter(r => r.status === 'inactive' || r.status === '未开始');
+      result = result.filter(r => getRoomStatus(r) === 'inactive');
     } else if (filter === 'ended') {
-      result = result.filter(r => r.status === 'ended');
+      result = result.filter(r => getRoomStatus(r) === 'ended');
     }
 
     if (viewMode === 'schedule') {
@@ -90,7 +88,7 @@ const LobbyApp: React.FC = () => {
     }
 
     return result;
-  }, [rooms, filter, viewMode, scheduleFilter]);
+  }, [rooms, filter, viewMode, scheduleFilter, forceUpdate]);
 
   const totalOnline = useMemo(() => 
     rooms.reduce((sum, r) => sum + r.online, 0), 
@@ -98,13 +96,18 @@ const LobbyApp: React.FC = () => {
   );
 
   const activeCount = useMemo(() => 
-    rooms.filter(r => r.status === 'active' || r.status === '进行中').length, 
-    [rooms]
+    rooms.filter(r => getRoomStatus(r) === 'active').length, 
+    [rooms, forceUpdate]
   );
 
   const scheduledCount = useMemo(() => 
-    rooms.filter(r => r.status === 'inactive' || r.status === '未开始').length, 
-    [rooms]
+    rooms.filter(r => getRoomStatus(r) === 'inactive').length, 
+    [rooms, forceUpdate]
+  );
+
+  const endedCount = useMemo(() => 
+    rooms.filter(r => getRoomStatus(r) === 'ended').length, 
+    [rooms, forceUpdate]
   );
 
   const handleCreateRoom = async () => {
@@ -196,6 +199,10 @@ const LobbyApp: React.FC = () => {
           <div className="stat-item">
             <div className="number">{scheduledCount}</div>
             <div className="label">待开始</div>
+          </div>
+          <div className="stat-item">
+            <div className="number">{endedCount}</div>
+            <div className="label">已结束</div>
           </div>
         </div>
       </div>
