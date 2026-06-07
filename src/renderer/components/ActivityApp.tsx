@@ -1,57 +1,19 @@
 import React, { useState } from 'react';
-
-interface HandRaise {
-  id: string;
-  name: string;
-  avatar: string;
-  time: string;
-}
-
-interface Vote {
-  id: string;
-  question: string;
-  options: string[];
-  results: number[];
-  active: boolean;
-}
-
-interface Task {
-  id: string;
-  name: string;
-  status: 'completed' | 'active' | 'locked';
-  reward: string;
-}
+import { useActivities, storeActions } from '../hooks/useStore';
 
 const ActivityApp: React.FC = () => {
+  const activities = useActivities();
   const [activeTab, setActiveTab] = useState('handraise');
-  const [handRaises, setHandRaises] = useState<HandRaise[]>([
-    { id: 'h1', name: '张三', avatar: '👨', time: '2分钟前' },
-    { id: 'h2', name: '李四', avatar: '👩', time: '5分钟前' },
-  ]);
-  const [votes, setVotes] = useState<Vote[]>([
-    { 
-      id: 'v1', 
-      question: '你对本次培训内容满意吗？', 
-      options: ['非常满意', '满意', '一般', '不满意'],
-      results: [12, 8, 2, 1],
-      active: false 
-    },
-  ]);
-  const [tasks] = useState<Task[]>([
-    { id: 't1', name: '第一关：基础知识测验', status: 'completed', reward: '🏆 青铜徽章' },
-    { id: 't2', name: '第二关：实操演练', status: 'active', reward: '🥈 白银徽章' },
-    { id: 't3', name: '第三关：综合考核', status: 'locked', reward: '🥇 黄金徽章' },
-  ]);
   const [showCreateVote, setShowCreateVote] = useState(false);
   const [newVoteQuestion, setNewVoteQuestion] = useState('');
   const [newVoteOptions, setNewVoteOptions] = useState(['', '']);
 
   const admitHand = (id: string) => {
-    setHandRaises(prev => prev.filter(h => h.id !== id));
+    storeActions.admitHandRaise(id);
   };
 
   const rejectHand = (id: string) => {
-    setHandRaises(prev => prev.filter(h => h.id !== id));
+    storeActions.rejectHandRaise(id);
   };
 
   const addVoteOption = () => {
@@ -76,23 +38,17 @@ const ActivityApp: React.FC = () => {
     if (!newVoteQuestion.trim() || newVoteOptions.filter(o => o.trim()).length < 2) return;
     
     const validOptions = newVoteOptions.filter(o => o.trim());
-    const newVote: Vote = {
-      id: `v${Date.now()}`,
+    storeActions.addVote({
       question: newVoteQuestion,
       options: validOptions,
-      results: new Array(validOptions.length).fill(0),
-      active: true,
-    };
-    setVotes([newVote, ...votes]);
+    });
     setShowCreateVote(false);
     setNewVoteQuestion('');
     setNewVoteOptions(['', '']);
   };
 
   const toggleVote = (id: string) => {
-    setVotes(prev => prev.map(v => 
-      v.id === id ? { ...v, active: !v.active } : v
-    ));
+    storeActions.toggleVoteActive(id);
   };
 
   const totalVotes = (results: number[]) => results.reduce((sum, r) => sum + r, 0);
@@ -108,7 +64,7 @@ const ActivityApp: React.FC = () => {
       <header className="header">
         <h1>🎮 活动中心</h1>
         <div className="nav-buttons">
-          <button className="btn btn-secondary" onClick={() => window.electronAPI.openWindow('room')}>
+          <button className="btn btn-secondary" onClick={() => storeActions.openWindow('room')}>
             🏠 房间
           </button>
         </div>
@@ -135,18 +91,18 @@ const ActivityApp: React.FC = () => {
                 <div className="hand-raise-header">
                   <h2>✋ 举手发言</h2>
                   <span className="status-badge status-warning">
-                    {handRaises.length} 人等待
+                    {activities.handRaises.length} 人等待
                   </span>
                 </div>
 
-                {handRaises.length === 0 ? (
+                {activities.handRaises.length === 0 ? (
                   <div className="empty-state">
                     <div className="icon">🙋</div>
                     <p>暂无举手申请</p>
                   </div>
                 ) : (
                   <div className="hand-raise-list">
-                    {handRaises.map(hand => (
+                    {activities.handRaises.map(hand => (
                       <div key={hand.id} className="hand-raise-item">
                         <div className="avatar">{hand.avatar}</div>
                         <div className="info">
@@ -199,7 +155,7 @@ const ActivityApp: React.FC = () => {
                   </button>
                 </div>
 
-                {votes.map(vote => {
+                {activities.votes.map(vote => {
                   const total = totalVotes(vote.results);
                   return (
                     <div key={vote.id} className="vote-card">
@@ -248,7 +204,7 @@ const ActivityApp: React.FC = () => {
               </p>
 
               <div className="task-list">
-                {tasks.map(task => (
+                {activities.tasks.map(task => (
                   <div key={task.id} className={`task-item ${task.status}`}>
                     <div className="task-icon">
                       {task.status === 'completed' ? '✅' : task.status === 'active' ? '🎯' : '🔒'}

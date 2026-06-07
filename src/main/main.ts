@@ -1,11 +1,11 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
-import * as path from 'path';
 import { createWindowManager } from './windowManager';
 
 let windowManager: ReturnType<typeof createWindowManager>;
 
 function createMainWindow() {
   windowManager = createWindowManager();
+  windowManager.registerIpcHandlers();
   windowManager.createLobbyWindow();
 }
 
@@ -25,7 +25,7 @@ app.on('window-all-closed', () => {
   }
 });
 
-ipcMain.handle('open-window', (_event, windowName: string, data?: any) => {
+ipcMain.handle('open-window', async (_event, windowName: string, data?: any) => {
   switch (windowName) {
     case 'lobby':
       windowManager.createLobbyWindow();
@@ -56,11 +56,13 @@ ipcMain.handle('close-window', (_event, windowName: string) => {
 });
 
 ipcMain.handle('get-data', (_event, key: string) => {
-  return windowManager.getData(key);
+  return windowManager.getState()[key];
 });
 
 ipcMain.handle('set-data', (_event, key: string, value: any) => {
-  windowManager.setData(key, value);
+  const state = windowManager.getState();
+  (state as any)[key] = value;
+  windowManager.broadcastState();
   return true;
 });
 

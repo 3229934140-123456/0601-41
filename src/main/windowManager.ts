@@ -1,5 +1,7 @@
-import { BrowserWindow } from 'electron';
+import { BrowserWindow, ipcMain } from 'electron';
 import * as path from 'path';
+import * as fs from 'fs';
+import { initialState, Participant, Room, RecordingItem, Vote, HandRaise } from './store';
 
 interface WindowConfig {
   name: string;
@@ -20,44 +22,19 @@ const windowConfigs: Record<string, WindowConfig> = {
   management: { name: 'management', title: '管理控制台', width: 1200, height: 800, minWidth: 1000, minHeight: 700 },
 };
 
+let state = JSON.parse(JSON.stringify(initialState));
+
 export function createWindowManager() {
   const windows: Record<string, BrowserWindow | null> = {};
-  const sharedData: Record<string, any> = {
-    rooms: [
-      { id: '1', name: '产品培训会议室', theme: '科技蓝', capacity: 50, online: 23, status: '进行中', host: '张老师' },
-      { id: '2', name: '新人入职培训厅', theme: '清新绿', capacity: 30, online: 15, status: '进行中', host: '李主管' },
-      { id: '3', name: '技术分享会', theme: '商务灰', capacity: 100, online: 67, status: '进行中', host: '王工' },
-      { id: '4', name: '虚拟教室A', theme: '温馨橙', capacity: 40, online: 0, status: '未开始', host: '待定' },
-    ],
-    currentUser: { id: 'u001', name: '组织者', role: 'host', avatar: '👨‍💼' },
-    participants: [
-      { id: 'p1', name: '张三', avatar: '👨', seat: 1, muted: false, online: true, group: '一组' },
-      { id: 'p2', name: '李四', avatar: '👩', seat: 2, muted: true, online: true, group: '一组' },
-      { id: 'p3', name: '王五', avatar: '🧑', seat: 3, muted: false, online: true, group: '二组' },
-      { id: 'p4', name: '赵六', avatar: '👨‍🦱', seat: 4, muted: true, online: true, group: '二组' },
-      { id: 'p5', name: '钱七', avatar: '👩‍🦰', seat: 5, muted: false, online: true, group: '三组' },
-      { id: 'p6', name: '孙八', avatar: '🧔', seat: 6, muted: true, online: false, group: '三组' },
-      { id: 'p7', name: '周九', avatar: '👴', seat: 7, muted: false, online: true, group: '一组' },
-      { id: 'p8', name: '吴十', avatar: '👵', seat: 8, muted: true, online: true, group: '二组' },
-    ],
-    currentRoom: null,
-    recordings: [
-      { id: 'r1', name: '产品介绍片段1', duration: '05:32', date: '2026-06-05 14:30', size: '45.2 MB' },
-      { id: 'r2', name: '互动问答环节', duration: '12:18', date: '2026-06-05 15:10', size: '98.7 MB' },
-      { id: 'r3', name: '总结发言', duration: '03:45', date: '2026-06-05 16:00', size: '28.1 MB' },
-    ],
-    activities: {
-      handRaises: [],
-      votes: [
-        { id: 'v1', question: '你对本次培训内容满意吗？', options: ['非常满意', '满意', '一般', '不满意'], results: [12, 8, 2, 1], active: false },
-      ],
-      tasks: [
-        { id: 't1', name: '第一关：基础知识测验', status: 'completed', reward: '🏆 青铜徽章' },
-        { id: 't2', name: '第二关：实操演练', status: 'active', reward: '🥈 白银徽章' },
-        { id: 't3', name: '第三关：综合考核', status: 'locked', reward: '🥇 黄金徽章' },
-      ],
-    },
-  };
+
+  function broadcastState() {
+    Object.keys(windows).forEach(name => {
+      const win = windows[name];
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('state-updated', state);
+      }
+    });
+  }
 
   function createWindow(name: string, data?: any): BrowserWindow {
     const config = windowConfigs[name];
@@ -77,7 +54,6 @@ export function createWindowManager() {
       webPreferences: {
         nodeIntegration: true,
         contextIsolation: false,
-        preload: path.join(__dirname, 'preload.js'),
       },
       backgroundColor: '#1a1a2e',
       frame: true,
@@ -99,11 +75,347 @@ export function createWindowManager() {
     return win;
   }
 
+  // 参与者管理
+  function getParticipants(): Participant[] {
+    return state.participants;
+  }
+
+  function addParticipant(participant: Partial<Participant> & { name: string }): Participant {
+    const maxSeat = state.participants.reduce((max: number, p: Participant) => Math.max(max, p.seat), 0);
+    const newParticipant: Participant = {
+      id: `p${Date.now()}`,
+      name: participant.name,
+      avatar: participant.avatar || '🧑',
+      seat: maxSeat + 1,
+      muted: true,
+      online: false,
+      group: participant.group || '一组',
+      joinTime: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+      connectionStatus: 'good',
+      role: 'participant',
+    };
+    state.participants.push(newParticipant);
+    broadcastState();
+    return newParticipant;
+  }
+
+  function removeParticipant(id: string): boolean {
+    const index = state.participants.findIndex((p: Participant) => p.id === id);
+    if (index > -1) {
+      state.participants.splice(index, 1);
+      broadcastState();
+      return true;
+    }
+    return false;
+  }
+
+  function updateParticipant(id: string, updates: Partial<Participant>): Participant | null {
+    const participant = state.participants.find((p: Participant) => p.id === id);
+    if (participant) {
+      Object.assign(participant, updates);
+      broadcastState();
+      return participant;
+    }
+    return null;
+  }
+
+  function swapSeats(participantId1: string, participantId2: string): boolean {
+    const p1 = state.participants.find((p: Participant) => p.id === participantId1);
+    const p2 = state.participants.find((p: Participant) => p.id === participantId2);
+    if (p1 && p2) {
+      const tempSeat = p1.seat;
+      p1.seat = p2.seat;
+      p2.seat = tempSeat;
+      broadcastState();
+      return true;
+    }
+    return false;
+  }
+
+  function moveToSeat(participantId: string, seatNumber: number): boolean {
+    const participant = state.participants.find((p: Participant) => p.id === participantId);
+    const existing = state.participants.find((p: Participant) => p.seat === seatNumber);
+    if (participant) {
+      if (existing) {
+        existing.seat = participant.seat;
+      }
+      participant.seat = seatNumber;
+      broadcastState();
+      return true;
+    }
+    return false;
+  }
+
+  function changeGroup(participantId: string, newGroup: string): boolean {
+    const participant = state.participants.find((p: Participant) => p.id === participantId);
+    if (participant) {
+      participant.group = newGroup;
+      broadcastState();
+      return true;
+    }
+    return false;
+  }
+
+  function toggleMute(participantId: string): boolean {
+    const participant = state.participants.find((p: Participant) => p.id === participantId);
+    if (participant) {
+      participant.muted = !participant.muted;
+      broadcastState();
+      return true;
+    }
+    return false;
+  }
+
+  function muteAll(): void {
+    state.participants.forEach((p: Participant) => { p.muted = true; });
+    broadcastState();
+  }
+
+  // 房间管理
+  function getRooms(): Room[] {
+    return state.rooms;
+  }
+
+  function addRoom(room: Partial<Room> & { name: string }): Room {
+    const newRoom: Room = {
+      id: Date.now().toString(),
+      name: room.name,
+      theme: room.theme || '科技蓝',
+      description: room.description || '',
+      capacity: room.capacity || 30,
+      online: 0,
+      participantCount: 0,
+      status: '未开始',
+      host: state.currentUser.name,
+      permission: room.permission || 'invite',
+    };
+    state.rooms.push(newRoom);
+    broadcastState();
+    return newRoom;
+  }
+
+  function setCurrentRoom(roomId: string): Room | null {
+    const room = state.rooms.find((r: Room) => r.id === roomId);
+    if (room) {
+      state.currentRoom = room;
+      broadcastState();
+      return room;
+    }
+    return null;
+  }
+
+  function getCurrentRoom(): Room | null {
+    return state.currentRoom;
+  }
+
+  // 录制管理
+  function getRecordings(): RecordingItem[] {
+    return state.recordings;
+  }
+
+  function addRecording(recording: Partial<RecordingItem> & { name: string; durationSeconds: number }): RecordingItem {
+    const mins = Math.floor(recording.durationSeconds / 60);
+    const secs = recording.durationSeconds % 60;
+    const duration = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    const newRecording: RecordingItem = {
+      id: `r${Date.now()}`,
+      name: recording.name,
+      duration,
+      date: new Date().toLocaleString('zh-CN'),
+      size: `${(recording.durationSeconds * 0.15).toFixed(1)} MB`,
+      durationSeconds: recording.durationSeconds,
+    };
+    state.recordings.unshift(newRecording);
+    broadcastState();
+    return newRecording;
+  }
+
+  function deleteRecording(id: string): boolean {
+    const index = state.recordings.findIndex((r: RecordingItem) => r.id === id);
+    if (index > -1) {
+      state.recordings.splice(index, 1);
+      broadcastState();
+      return true;
+    }
+    return false;
+  }
+
+  // 文件导出
+  function exportAttendanceCSV(filePath: string, filter?: { search?: string; group?: string }): boolean {
+    try {
+      let participants = [...state.participants];
+      
+      if (filter?.search) {
+        const search = filter.search.toLowerCase();
+        participants = participants.filter(p => p.name.toLowerCase().includes(search));
+      }
+      if (filter?.group && filter.group !== 'all') {
+        participants = participants.filter(p => p.group === filter.group);
+      }
+
+      const headers = ['ID', '姓名', '分组', '座位号', '状态', '加入时间', '连接状态', '麦克风'];
+      const rows = participants.map(p => [
+        p.id,
+        p.name,
+        p.group,
+        p.seat.toString(),
+        p.online ? '在线' : '离线',
+        p.joinTime,
+        p.connectionStatus === 'good' ? '良好' : p.connectionStatus === 'warning' ? '一般' : '较差',
+        p.muted ? '静音' : '开启',
+      ]);
+
+      const csvContent = [
+        headers.join(','),
+        ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+      ].join('\n');
+
+      // 添加 BOM 以支持 Excel 中文显示
+      const bom = '\uFEFF';
+      fs.writeFileSync(filePath, bom + csvContent, 'utf-8');
+      return true;
+    } catch (err) {
+      console.error('导出CSV失败:', err);
+      return false;
+    }
+  }
+
+  function exportWhiteboardPNG(filePath: string, dataUrl: string): boolean {
+    try {
+      const base64Data = dataUrl.replace(/^data:image\/png;base64,/, '');
+      fs.writeFileSync(filePath, base64Data, 'base64');
+      return true;
+    } catch (err) {
+      console.error('导出PNG失败:', err);
+      return false;
+    }
+  }
+
+  function generateRecordingFile(filePath: string, recordingId: string): boolean {
+    try {
+      const recording = state.recordings.find((r: RecordingItem) => r.id === recordingId);
+      if (!recording) return false;
+
+      // 生成一个模拟的录制文件（实际项目中应该是真实的视频文件）
+      const content = `Metaverse Recording\n================\nTitle: ${recording.name}\nDuration: ${recording.duration}\nDate: ${recording.date}\nSize: ${recording.size}\n\n[这是一个模拟的录制文件，实际项目中会包含真实的视频/音频数据]`;
+      fs.writeFileSync(filePath, content, 'utf-8');
+      return true;
+    } catch (err) {
+      console.error('生成录制文件失败:', err);
+      return false;
+    }
+  }
+
+  // 白板数据
+  function saveWhiteboardData(dataUrl: string): void {
+    state.whiteboardData = dataUrl;
+    broadcastState();
+  }
+
+  function getWhiteboardData(): string | null {
+    return state.whiteboardData;
+  }
+
+  // 活动管理
+  function addVote(vote: { question: string; options: string[] }): any {
+    const newVote = {
+      id: `v${Date.now()}`,
+      question: vote.question,
+      options: vote.options,
+      results: new Array(vote.options.length).fill(0),
+      active: true,
+    };
+    state.activities.votes.unshift(newVote);
+    broadcastState();
+    return newVote;
+  }
+
+  function toggleVoteActive(voteId: string): boolean {
+    const vote = state.activities.votes.find((v: Vote) => v.id === voteId);
+    if (vote) {
+      vote.active = !vote.active;
+      broadcastState();
+      return true;
+    }
+    return false;
+  }
+
+  function admitHandRaise(handId: string): boolean {
+    const index = state.activities.handRaises.findIndex((h: HandRaise) => h.id === handId);
+    if (index > -1) {
+      state.activities.handRaises.splice(index, 1);
+      broadcastState();
+      return true;
+    }
+    return false;
+  }
+
+  function rejectHandRaise(handId: string): boolean {
+    const index = state.activities.handRaises.findIndex((h: HandRaise) => h.id === handId);
+    if (index > -1) {
+      state.activities.handRaises.splice(index, 1);
+      broadcastState();
+      return true;
+    }
+    return false;
+  }
+
+  // 用户管理
+  function getCurrentUser(): any {
+    return state.currentUser;
+  }
+
+  function updateCurrentUser(updates: any): any {
+    Object.assign(state.currentUser, updates);
+    broadcastState();
+    return state.currentUser;
+  }
+
+  // 注册 IPC 处理器
+  function registerIpcHandlers() {
+    ipcMain.handle('get-state', () => state);
+    ipcMain.handle('get-participants', () => getParticipants());
+    ipcMain.handle('add-participant', (_event, data) => addParticipant(data));
+    ipcMain.handle('remove-participant', (_event, id) => removeParticipant(id));
+    ipcMain.handle('update-participant', (_event, id, updates) => updateParticipant(id, updates));
+    ipcMain.handle('swap-seats', (_event, id1, id2) => swapSeats(id1, id2));
+    ipcMain.handle('move-to-seat', (_event, id, seat) => moveToSeat(id, seat));
+    ipcMain.handle('change-group', (_event, id, group) => changeGroup(id, group));
+    ipcMain.handle('toggle-mute', (_event, id) => toggleMute(id));
+    ipcMain.handle('mute-all', () => muteAll());
+    
+    ipcMain.handle('get-rooms', () => getRooms());
+    ipcMain.handle('add-room', (_event, data) => addRoom(data));
+    ipcMain.handle('set-current-room', (_event, id) => setCurrentRoom(id));
+    ipcMain.handle('get-current-room', () => getCurrentRoom());
+    
+    ipcMain.handle('get-recordings', () => getRecordings());
+    ipcMain.handle('add-recording', (_event, data) => addRecording(data));
+    ipcMain.handle('delete-recording', (_event, id) => deleteRecording(id));
+    
+    ipcMain.handle('export-attendance-csv', (_event, filePath, filter) => exportAttendanceCSV(filePath, filter));
+    ipcMain.handle('export-whiteboard-png', (_event, filePath, dataUrl) => exportWhiteboardPNG(filePath, dataUrl));
+    ipcMain.handle('generate-recording-file', (_event, filePath, recordingId) => generateRecordingFile(filePath, recordingId));
+    
+    ipcMain.handle('save-whiteboard', (_event, dataUrl) => saveWhiteboardData(dataUrl));
+    ipcMain.handle('get-whiteboard-data', () => getWhiteboardData());
+    
+    ipcMain.handle('add-vote', (_event, data) => addVote(data));
+    ipcMain.handle('toggle-vote-active', (_event, id) => toggleVoteActive(id));
+    ipcMain.handle('admit-hand-raise', (_event, id) => admitHandRaise(id));
+    ipcMain.handle('reject-hand-raise', (_event, id) => rejectHandRaise(id));
+    
+    ipcMain.handle('get-current-user', () => getCurrentUser());
+    ipcMain.handle('update-current-user', (_event, updates) => updateCurrentUser(updates));
+    
+    ipcMain.handle('get-groups', () => state.groups);
+  }
+
   return {
     createLobbyWindow: () => createWindow('lobby'),
     createRoomWindow: (data?: any) => {
-      if (data) {
-        sharedData.currentRoom = data;
+      if (data && data.id) {
+        state.currentRoom = data;
       }
       return createWindow('room', data);
     },
@@ -118,10 +430,9 @@ export function createWindowManager() {
         windows[name] = null;
       }
     },
-    getData: (key: string) => sharedData[key],
-    setData: (key: string, value: any) => {
-      sharedData[key] = value;
-    },
     getWindows: () => windows,
+    registerIpcHandlers,
+    broadcastState,
+    getState: () => state,
   };
 }

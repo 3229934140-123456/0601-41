@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { useCurrentUser, storeActions } from '../hooks/useStore';
 
 const CharacterApp: React.FC = () => {
+  const currentUser = useCurrentUser();
   const [selectedAvatar, setSelectedAvatar] = useState('👨‍💼');
   const [selectedColor, setSelectedColor] = useState('#667eea');
   const [characterName, setCharacterName] = useState('组织者');
@@ -10,6 +12,13 @@ const CharacterApp: React.FC = () => {
     tie: true,
     badge: false,
   });
+
+  useEffect(() => {
+    if (currentUser) {
+      setCharacterName(currentUser.name);
+      setSelectedAvatar(currentUser.avatar || '👨‍💼');
+    }
+  }, [currentUser]);
 
   const avatars = [
     '👨‍💼', '👩‍💼', '👨‍🎓', '👩‍🎓', '👨‍🔬', '👩‍🔬',
@@ -35,11 +44,9 @@ const CharacterApp: React.FC = () => {
   };
 
   const saveCharacter = () => {
-    window.electronAPI.setData('currentUser', {
+    storeActions.updateCurrentUser({
       name: characterName,
       avatar: selectedAvatar,
-      color: selectedColor,
-      accessories,
     });
   };
 
@@ -48,7 +55,7 @@ const CharacterApp: React.FC = () => {
       <header className="header">
         <h1>👤 角色形象</h1>
         <div className="nav-buttons">
-          <button className="btn btn-secondary" onClick={() => window.electronAPI.openWindow('lobby')}>
+          <button className="btn btn-secondary" onClick={() => storeActions.openWindow('lobby')}>
             🏠 大厅
           </button>
           <button className="btn btn-primary" onClick={saveCharacter}>

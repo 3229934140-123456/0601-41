@@ -1,299 +1,383 @@
-import React, { useState, useEffect, useRef } from 'react';
-
-interface Recording {
-  id: string;
-  name: string;
-  duration: string;
-  date: string;
-  size: string;
-}
-
-interface BGM {
-  id: string;
-  name: string;
-  duration: string;
-  icon: string;
-}
+import React, { useState, useRef, useEffect } from 'react';
+import { useRecordings, useParticipants, storeActions, getAvatarColor } from '../hooks/useStore';
 
 const RecordingApp: React.FC = () => {
+  const recordings = useRecordings();
+  const participants = useParticipants();
+  const [activeTab, setActiveTab] = useState('recordings');
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
-  const [recordings, setRecordings] = useState<Recording[]>([
-    { id: 'r1', name: '产品介绍片段1', duration: '05:32', date: '2026-06-05 14:30', size: '45.2 MB' },
-    { id: 'r2', name: '互动问答环节', duration: '12:18', date: '2026-06-05 15:10', size: '98.7 MB' },
-    { id: 'r3', name: '总结发言', duration: '03:45', date: '2026-06-05 16:00', size: '28.1 MB' },
-  ]);
-  const [bgmList] = useState<BGM[]>([
-    { id: 'b1', name: '轻松钢琴曲', duration: '03:24', icon: '🎹' },
-    { id: 'b2', name: '轻快电子乐', duration: '04:12', icon: '🎵' },
-    { id: 'b3', name: '自然白噪音', duration: '05:00', icon: '🌿' },
-    { id: 'b4', name: '古典交响乐', duration: '06:30', icon: '🎻' },
-  ]);
-  const [playingBgm, setPlayingBgm] = useState<string | null>(null);
-  const [volume, setVolume] = useState(50);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [volume, setVolume] = useState(70);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentMusic, setCurrentMusic] = useState('');
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = volume / 100;
+    }
+  }, [volume]);
 
   useEffect(() => {
     if (isRecording) {
-      intervalRef.current = setInterval(() => {
+      timerRef.current = setInterval(() => {
         setRecordingTime(prev => prev + 1);
       }, 1000);
     } else {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
       }
     }
     return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
+      if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [isRecording]);
 
-  const formatTime = (seconds: number) => {
+  const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const startRecording = () => {
-    setIsRecording(true);
-    setRecordingTime(0);
+  const formatDuration = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}分${secs}秒`;
   };
 
-  const stopRecording = () => {
-    setIsRecording(false);
-    if (recordingTime > 0) {
-      const newRecording: Recording = {
-        id: `r${Date.now()}`,
+  const toggleRecording = () => {
+    if (isRecording) {
+      setIsRecording(false);
+      storeActions.addRecording({
         name: `录制片段 ${recordings.length + 1}`,
-        duration: formatTime(recordingTime),
-        date: new Date().toLocaleString('zh-CN'),
-        size: `${(recordingTime * 0.15).toFixed(1)} MB`,
-      };
-      setRecordings([newRecording, ...recordings]);
-    }
-  };
-
-  const pauseRecording = () => {
-    setIsRecording(false);
-  };
-
-  const toggleBgm = (id: string) => {
-    if (playingBgm === id) {
-      setPlayingBgm(null);
+        durationSeconds: recordingTime,
+      });
+      setRecordingTime(0);
     } else {
-      setPlayingBgm(id);
+      setIsRecording(true);
     }
   };
 
-  const deleteRecording = (id: string) => {
-    setRecordings(prev => prev.filter(r => r.id !== id));
-  };
-
-  const exportRecording = async (id: string) => {
-    const result = await window.electronAPI.showSaveDialog({
-      defaultPath: 'recording.mp4',
+  const exportRecording = async (rec: { id: string; name: string; durationSeconds: number }) => {
+    const result = await storeActions.showSaveDialog({
+      defaultPath: `${rec.name}.mp4`,
       filters: [
         { name: 'MP4 Video', extensions: ['mp4'] },
         { name: 'All Files', extensions: ['*'] },
       ],
     });
-    if (!result.canceled) {
-      console.log('导出到:', result.filePath);
+
+    if (!result.canceled && result.filePath) {
+      await storeActions.generateRecordingFile(result.filePath, rec.id);
     }
   };
 
   const exportAttendance = async () => {
-    const result = await window.electronAPI.showSaveDialog({
+    const result = await storeActions.showSaveDialog({
       defaultPath: '参会记录.csv',
-      filters: [
-        { name: 'CSV File', extensions: ['csv'] },
-        { name: 'Excel File', extensions: ['xlsx'] },
-      ],
+      filters: [{ name: 'CSV File', extensions: ['csv'] }],
     });
-    if (!result.canceled) {
-      console.log('导出到:', result.filePath);
+
+    if (!result.canceled && result.filePath) {
+      await storeActions.exportAttendanceCSV(result.filePath);
     }
+  };
+
+  const toggleMusic = (musicName: string) => {
+    if (currentMusic === musicName && isPlaying) {
+      setIsPlaying(false);
+    } else {
+      setCurrentMusic(musicName);
+      setIsPlaying(true);
+    }
+  };
+
+  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newVolume = parseInt(e.target.value);
+    setVolume(newVolume);
+  };
+
+  const bgMusicList = [
+    { id: 'm1', name: '轻松氛围', icon: '🎵', duration: '3:24' },
+    { id: 'm2', name: '专注思考', icon: '🎶', duration: '4:12' },
+    { id: 'm3', name: '激情昂扬', icon: '🎸', duration: '2:58' },
+    { id: 'm4', name: '舒缓放松', icon: '🎹', duration: '5:30' },
+  ];
+
+  const getRoleLabel = (role: string) => {
+    switch (role) {
+      case 'host': return '主持人';
+      case 'cohost': return '副主持';
+      default: return '参会者';
+    }
+  };
+
+  const openWindow = (name: string) => {
+    storeActions.openWindow(name);
   };
 
   return (
     <div className="recording-container">
       <header className="header">
-        <h1>⏺️ 录制中心</h1>
+        <h1>🎬 录制中心</h1>
         <div className="nav-buttons">
-          <button className="btn btn-secondary" onClick={() => window.electronAPI.openWindow('room')}>
+          <button className="btn btn-secondary" onClick={() => openWindow('lobby')}>
+            🏛️ 大厅
+          </button>
+          <button className="btn btn-secondary" onClick={() => openWindow('room')}>
             🏠 房间
           </button>
         </div>
       </header>
 
       <div className="recording-main">
-        <div className="recording-content">
-          <div className="status-section">
-            <div className={`recording-indicator ${isRecording ? '' : 'stopped'}`}>
-              <div className="recording-dot"></div>
-              <span>{isRecording ? '录制中...' : '未录制'}</span>
-            </div>
-            
-            <div className="recording-time">{formatTime(recordingTime)}</div>
-            <div className="recording-time-label">当前录制时长</div>
-            
-            <div className="record-controls">
-              {!isRecording ? (
-                <button className="record-btn start" onClick={startRecording}>
-                  ⏺️
-                </button>
-              ) : (
-                <>
-                  <button className="record-btn secondary" onClick={pauseRecording}>
-                    ⏸️
-                  </button>
-                  <button className="record-btn start" onClick={stopRecording}>
-                    ⏹️
-                  </button>
-                </>
-              )}
-            </div>
+        <div className="recording-left">
+          <div className="tab-buttons">
+            <button
+              className={`tab-btn ${activeTab === 'recordings' ? 'active' : ''}`}
+              onClick={() => setActiveTab('recordings')}
+            >
+              📹 录制片段
+            </button>
+            <button
+              className={`tab-btn ${activeTab === 'music' ? 'active' : ''}`}
+              onClick={() => setActiveTab('music')}
+            >
+              🎵 背景音乐
+            </button>
+            <button
+              className={`tab-btn ${activeTab === 'attendance' ? 'active' : ''}`}
+              onClick={() => setActiveTab('attendance')}
+            >
+              👥 参会记录
+            </button>
           </div>
 
-          <div className="recordings-list-section">
-            <h3 style={{ marginBottom: '16px' }}>📁 已录制片段 ({recordings.length})</h3>
-            
-            {recordings.length === 0 ? (
-              <div className="empty-state">
-                <div className="icon">🎬</div>
-                <p>暂无录制片段</p>
-              </div>
-            ) : (
-              recordings.map(rec => (
-                <div key={rec.id} className="recording-item">
-                  <div className="name">🎬 {rec.name}</div>
-                  <div className="meta">
-                    <span>⏱️ {rec.duration}</span>
-                    <span>📅 {rec.date}</span>
-                    <span>💾 {rec.size}</span>
-                  </div>
-                  <div className="actions">
-                    <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }}>
-                      ▶️ 播放
-                    </button>
-                    <button 
-                      className="btn btn-primary" 
-                      style={{ padding: '6px 12px', fontSize: '12px' }}
-                      onClick={() => exportRecording(rec.id)}
-                    >
-                      📤 导出
-                    </button>
-                    <button 
-                      className="btn btn-secondary" 
-                      style={{ padding: '6px 12px', fontSize: '12px' }}
-                      onClick={() => deleteRecording(rec.id)}
-                    >
-                      🗑️
-                    </button>
+          {activeTab === 'recordings' && (
+            <div className="tab-content">
+              <div className="record-panel">
+                <div className={`record-status ${isRecording ? 'recording' : ''}`}>
+                  <div className="record-dot"></div>
+                  <div className="record-time">{formatTime(recordingTime)}</div>
+                  <div className="record-label">
+                    {isRecording ? '录制中...' : '准备录制'}
                   </div>
                 </div>
-              ))
-            )}
-          </div>
+
+                <button 
+                  className={`record-btn ${isRecording ? 'stop' : 'start'}`}
+                  onClick={toggleRecording}
+                >
+                  {isRecording ? '⏹ 停止录制' : '⏺ 开始录制'}
+                </button>
+              </div>
+
+              <h3>录制历史</h3>
+              <div className="recording-list">
+                {recordings.map(rec => (
+                  <div key={rec.id} className="recording-item">
+                    <div className="thumb">🎬</div>
+                    <div className="info">
+                      <div className="name">{rec.name}</div>
+                      <div className="meta">
+                        {rec.duration} · {rec.date} · {rec.size}
+                      </div>
+                    </div>
+                    <div className="actions">
+                      <button className="action-icon-btn" title="播放">▶️</button>
+                      <button 
+                        className="action-icon-btn" 
+                        title="导出"
+                        onClick={() => exportRecording(rec)}
+                      >
+                        📥
+                      </button>
+                      <button className="action-icon-btn" title="删除">🗑️</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'music' && (
+            <div className="tab-content">
+              <div className="music-player">
+                <div className="now-playing">
+                  <div className="album-art">🎵</div>
+                  <div className="song-info">
+                    <div className="song-name">
+                      {currentMusic || '未播放'}
+                    </div>
+                    <div className="song-status">
+                      {isPlaying ? '正在播放...' : '选择一首歌开始播放'}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="player-controls">
+                  <button className="player-btn">⏮️</button>
+                  <button 
+                    className="player-btn play-btn"
+                    onClick={() => currentMusic && setIsPlaying(!isPlaying)}
+                    disabled={!currentMusic}
+                  >
+                    {isPlaying ? '⏸️' : '▶️'}
+                  </button>
+                  <button className="player-btn">⏭️</button>
+                </div>
+
+                <div className="volume-control">
+                  <span>🔊</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={volume}
+                    onChange={handleVolumeChange}
+                    className="volume-slider"
+                  />
+                  <span className="volume-value">{volume}%</span>
+                </div>
+              </div>
+
+              <h3>背景音乐列表</h3>
+              <div className="music-list">
+                {bgMusicList.map(music => (
+                  <div 
+                    key={music.id} 
+                    className={`music-item ${currentMusic === music.name && isPlaying ? 'playing' : ''}`}
+                    onClick={() => toggleMusic(music.name)}
+                  >
+                    <div className="music-icon">{music.icon}</div>
+                    <div className="music-info">
+                      <div className="name">{music.name}</div>
+                      <div className="duration">时长: {music.duration}</div>
+                    </div>
+                    <button className="action-icon-btn">
+                      {currentMusic === music.name && isPlaying ? '⏸️' : '▶️'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <button className="btn btn-secondary" style={{ width: '100%', marginTop: '16px' }}>
+                ➕ 上传音乐
+              </button>
+            </div>
+          )}
+
+          {activeTab === 'attendance' && (
+            <div className="tab-content">
+              <div className="attendance-header">
+                <h3>参会记录</h3>
+                <button className="btn btn-primary" onClick={exportAttendance}>
+                  📥 导出CSV
+                </button>
+              </div>
+
+              <div className="attendance-stats">
+                <div className="stat-card">
+                  <div className="stat-value">{participants.length}</div>
+                  <div className="stat-label">总参会人数</div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-value">
+                    {participants.filter(p => p.online).length}
+                  </div>
+                  <div className="stat-label">在线人数</div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-value">
+                    {participants.filter(p => !p.online).length}
+                  </div>
+                  <div className="stat-label">离线人数</div>
+                </div>
+              </div>
+
+              <div className="attendance-list">
+                {participants.map(p => (
+                  <div key={p.id} className="attendance-item">
+                    <div className="avatar" style={{ backgroundColor: getAvatarColor(p.name) }}>
+                      {p.name[0]}
+                    </div>
+                    <div className="info">
+                      <div className="name">{p.name}</div>
+                      <div className="details">
+                        {getRoleLabel(p.role)} · {p.group}
+                      </div>
+                    </div>
+                    <div className={`status-badge ${p.online ? 'online' : 'offline'}`}>
+                      {p.online ? '在线' : '离线'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
-        <div className="recording-sidebar">
-          <div className="bgm-section">
-            <h3>🎵 背景音乐</h3>
-            
-            {bgmList.map(bgm => (
-              <div
-                key={bgm.id}
-                className={`bgm-item ${playingBgm === bgm.id ? 'playing' : ''}`}
-                onClick={() => toggleBgm(bgm.id)}
-              >
-                <div className="icon">{bgm.icon}</div>
-                <div className="info">
-                  <div className="name">{bgm.name}</div>
-                  <div className="duration">{bgm.duration}</div>
-                </div>
-                <div className="play-icon">
-                  {playingBgm === bgm.id ? '⏸️' : '▶️'}
-                </div>
-              </div>
-            ))}
-
-            <div className="volume-control">
-              <span className="volume-icon">{volume > 0 ? '🔊' : '🔇'}</span>
-              <div 
-                className="volume-slider"
-                onClick={(e) => {
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  const pct = (e.clientX - rect.left) / rect.width * 100;
-                  setVolume(Math.max(0, Math.min(100, Math.round(pct))));
-                }}
-              >
-                <div className="volume-fill" style={{ width: `${volume}%` }}></div>
-              </div>
-              <span style={{ fontSize: '12px', color: '#888', minWidth: '30px' }}>{volume}%</span>
-            </div>
+        <div className="recording-right">
+          <h3>📊 录制统计</h3>
+          
+          <div className="stat-item">
+            <span>总录制时长</span>
+            <span className="highlight">
+              {recordings.reduce((acc, r) => acc + r.durationSeconds, 0) > 0 
+                ? formatDuration(recordings.reduce((acc, r) => acc + r.durationSeconds, 0))
+                : '0分0秒'
+              }
+            </span>
+          </div>
+          
+          <div className="stat-item">
+            <span>录制片段数</span>
+            <span className="highlight">{recordings.length} 个</span>
+          </div>
+          
+          <div className="stat-item">
+            <span>存储空间</span>
+            <span className="highlight">128 MB / 1 GB</span>
           </div>
 
-          <div className="export-section">
-            <h3>📤 导出选项</h3>
-            
-            <div className="export-options">
-              <div className="export-option" onClick={exportAttendance}>
-                <div className="icon">📊</div>
-                <div className="info">
-                  <div className="title">参会记录</div>
-                  <div className="desc">导出Excel/CSV格式</div>
-                </div>
-              </div>
-              
-              <div className="export-option">
-                <div className="icon">🎬</div>
-                <div className="info">
-                  <div className="title">全部录像</div>
-                  <div className="desc">批量导出MP4格式</div>
-                </div>
-              </div>
-              
-              <div className="export-option">
-                <div className="icon">📝</div>
-                <div className="info">
-                  <div className="title">白板内容</div>
-                  <div className="desc">导出PNG/PDF格式</div>
-                </div>
-              </div>
-
-              <div className="export-option">
-                <div className="icon">📈</div>
-                <div className="info">
-                  <div className="title">数据报表</div>
-                  <div className="desc">互动统计汇总报告</div>
-                </div>
-              </div>
-            </div>
+          <div className="storage-bar">
+            <div className="storage-used" style={{ width: '12.8%' }}></div>
           </div>
 
-          <div className="card" style={{ marginTop: '24px' }}>
-            <h3 style={{ marginBottom: '12px', fontSize: '15px' }}>⚙️ 录制设置</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
-                <span>录制音频</span>
-                <div className="toggle-switch active"></div>
-              </label>
-              <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
-                <span>录制摄像头</span>
-                <div className="toggle-switch active"></div>
-              </label>
-              <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
-                <span>录制屏幕</span>
-                <div className="toggle-switch active"></div>
-              </label>
-              <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
-                <span>高清画质</span>
-                <div className="toggle-switch"></div>
-              </label>
-            </div>
+          <h3 style={{ marginTop: '24px' }}>⚙️ 录制设置</h3>
+          
+          <div className="setting-item">
+            <label>录制质量</label>
+            <select className="input-field" style={{ width: 'auto' }}>
+              <option>高清 1080p</option>
+              <option>标清 720p</option>
+              <option>流畅 480p</option>
+            </select>
+          </div>
+
+          <div className="setting-item">
+            <label>录制格式</label>
+            <select className="input-field" style={{ width: 'auto' }}>
+              <option>MP4</option>
+              <option>MKV</option>
+              <option>WEBM</option>
+            </select>
+          </div>
+
+          <div className="setting-item">
+            <label>包含音频</label>
+            <input type="checkbox" defaultChecked />
+          </div>
+
+          <div className="setting-item">
+            <label>录制摄像头</label>
+            <input type="checkbox" defaultChecked />
+          </div>
+
+          <div className="setting-item">
+            <label>录制屏幕</label>
+            <input type="checkbox" defaultChecked />
           </div>
         </div>
       </div>

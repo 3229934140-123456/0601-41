@@ -1,17 +1,8 @@
-import React, { useState, useEffect } from 'react';
-
-interface Room {
-  id: string;
-  name: string;
-  theme: string;
-  capacity: number;
-  online: number;
-  status: string;
-  host: string;
-}
+import React, { useState, useMemo } from 'react';
+import { useRooms, storeActions, Room } from '../hooks/useStore';
 
 const LobbyApp: React.FC = () => {
-  const [rooms, setRooms] = useState<Room[]>([]);
+  const rooms = useRooms();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newRoom, setNewRoom] = useState({
     name: '',
@@ -20,7 +11,6 @@ const LobbyApp: React.FC = () => {
     permission: 'invite',
   });
   const [filter, setFilter] = useState('all');
-  const [userName, setUserName] = useState('组织者');
 
   const themes = [
     { name: '科技蓝', class: 'theme-tech', color: '#667eea' },
@@ -29,44 +19,27 @@ const LobbyApp: React.FC = () => {
     { name: '温馨橙', class: 'theme-orange', color: '#f5576c' },
   ];
 
-  useEffect(() => {
-    loadRooms();
-  }, []);
-
-  const loadRooms = async () => {
-    const data = await window.electronAPI.getData('rooms');
-    if (data) {
-      setRooms(data);
-    }
-  };
-
   const handleCreateRoom = async () => {
     if (!newRoom.name.trim()) return;
     
-    const room: Room = {
-      id: Date.now().toString(),
+    await storeActions.addRoom({
       name: newRoom.name,
       theme: newRoom.theme,
       capacity: newRoom.capacity,
-      online: 0,
-      status: '未开始',
-      host: userName,
-    };
+      permission: newRoom.permission,
+    });
 
-    const updatedRooms = [...rooms, room];
-    setRooms(updatedRooms);
-    await window.electronAPI.setData('rooms', updatedRooms);
     setShowCreateModal(false);
     setNewRoom({ name: '', theme: '科技蓝', capacity: 30, permission: 'invite' });
   };
 
   const enterRoom = async (room: Room) => {
-    await window.electronAPI.setData('currentRoom', room);
-    await window.electronAPI.openWindow('room', room);
+    await storeActions.setCurrentRoom(room.id);
+    await storeActions.openWindow('room', room);
   };
 
   const openWindow = (name: string) => {
-    window.electronAPI.openWindow(name);
+    storeActions.openWindow(name);
   };
 
   const getThemeClass = (theme: string) => {
@@ -74,14 +47,24 @@ const LobbyApp: React.FC = () => {
     return t ? t.class : 'theme-tech';
   };
 
-  const filteredRooms = rooms.filter(room => {
-    if (filter === 'all') return true;
-    if (filter === 'active') return room.status === '进行中';
-    if (filter === 'scheduled') return room.status === '未开始';
-    return true;
-  });
+  const filteredRooms = useMemo(() => {
+    return rooms.filter(room => {
+      if (filter === 'all') return true;
+      if (filter === 'active') return room.status === '进行中';
+      if (filter === 'scheduled') return room.status === '未开始';
+      return true;
+    });
+  }, [rooms, filter]);
 
-  const totalOnline = rooms.reduce((sum, r) => sum + r.online, 0);
+  const totalOnline = useMemo(() => 
+    rooms.reduce((sum, r) => sum + r.online, 0), 
+    [rooms]
+  );
+
+  const activeCount = useMemo(() => 
+    rooms.filter(r => r.status === '进行中').length, 
+    [rooms]
+  );
 
   return (
     <div className="lobby-container">
@@ -93,6 +76,9 @@ const LobbyApp: React.FC = () => {
           </button>
           <button className="btn btn-secondary" onClick={() => openWindow('activity')}>
             🎮 活动
+          </button>
+          <button className="btn btn-secondary" onClick={() => openWindow('recording')}>
+            ⏺️ 录制
           </button>
           <button className="btn btn-secondary" onClick={() => openWindow('management')}>
             ⚙️ 管理
@@ -113,7 +99,7 @@ const LobbyApp: React.FC = () => {
             <div className="label">在线人数</div>
           </div>
           <div className="stat-item">
-            <div className="number">{rooms.filter(r => r.status === '进行中').length}</div>
+            <div className="number">{activeCount}</div>
             <div className="label">进行中</div>
           </div>
         </div>
