@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import { useRooms, storeActions, Room } from '../hooks/useStore';
+import { useRooms, useCurrentRoom, storeActions, Room } from '../hooks/useStore';
 
 const LobbyApp: React.FC = () => {
   const rooms = useRooms();
+  const currentRoom = useCurrentRoom();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newRoom, setNewRoom] = useState({
     name: '',
@@ -18,6 +19,21 @@ const LobbyApp: React.FC = () => {
     { name: '商务灰', class: 'theme-grey', color: '#8e9eab' },
     { name: '温馨橙', class: 'theme-orange', color: '#f5576c' },
   ];
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'active': return '进行中';
+      case 'inactive': return '未开始';
+      case '进行中': return '进行中';
+      case '未开始': return '未开始';
+      default: return status;
+    }
+  };
+
+  const getStatusClass = (status: string) => {
+    if (status === 'active' || status === '进行中') return 'status-active';
+    return 'status-inactive';
+  };
 
   const handleCreateRoom = async () => {
     if (!newRoom.name.trim()) return;
@@ -35,23 +51,32 @@ const LobbyApp: React.FC = () => {
 
   const enterRoom = async (room: Room) => {
     await storeActions.setCurrentRoom(room.id);
-    await storeActions.openWindow('room', room);
+    await storeActions.openWindow('room');
+  };
+
+  const openCurrentRoom = () => {
+    if (currentRoom) {
+      storeActions.openWindow('room');
+    } else if (rooms.length > 0) {
+      enterRoom(rooms[0]);
+    }
   };
 
   const openWindow = (name: string) => {
     storeActions.openWindow(name);
   };
 
-  const getThemeClass = (theme: string) => {
+  const getThemeBg = (theme: string) => {
+    if (theme.startsWith('linear-gradient')) return theme;
     const t = themes.find(th => th.name === theme);
-    return t ? t.class : 'theme-tech';
+    return t ? t.color : '#667eea';
   };
 
   const filteredRooms = useMemo(() => {
     return rooms.filter(room => {
       if (filter === 'all') return true;
-      if (filter === 'active') return room.status === '进行中';
-      if (filter === 'scheduled') return room.status === '未开始';
+      if (filter === 'active') return room.status === 'active' || room.status === '进行中';
+      if (filter === 'scheduled') return room.status === 'inactive' || room.status === '未开始';
       return true;
     });
   }, [rooms, filter]);
@@ -62,7 +87,7 @@ const LobbyApp: React.FC = () => {
   );
 
   const activeCount = useMemo(() => 
-    rooms.filter(r => r.status === '进行中').length, 
+    rooms.filter(r => r.status === 'active' || r.status === '进行中').length, 
     [rooms]
   );
 
@@ -73,6 +98,12 @@ const LobbyApp: React.FC = () => {
         <div className="nav-buttons">
           <button className="btn btn-secondary" onClick={() => openWindow('character')}>
             👤 角色
+          </button>
+          <button className="btn btn-secondary" onClick={openCurrentRoom}>
+            🏠 房间
+          </button>
+          <button className="btn btn-secondary" onClick={() => openWindow('whiteboard')}>
+            📝 白板
           </button>
           <button className="btn btn-secondary" onClick={() => openWindow('activity')}>
             🎮 活动
@@ -141,15 +172,29 @@ const LobbyApp: React.FC = () => {
               className="card room-card"
               onClick={() => enterRoom(room)}
             >
-              <div className={`room-theme ${getThemeClass(room.theme)}`}></div>
+              <div 
+                className="room-theme"
+                style={{ background: getThemeBg(room.theme) }}
+              ></div>
               <h3>{room.name}</h3>
               <div className="room-info">
                 <span>👥 {room.online}/{room.capacity}</span>
-                <span>🎨 {room.theme}</span>
-                <span className={`status-badge ${room.status === '进行中' ? 'status-active' : 'status-inactive'}`}>
-                  {room.status}
+                <span className={`status-badge ${getStatusClass(room.status)}`}>
+                  {getStatusText(room.status)}
                 </span>
               </div>
+              {room.description && (
+                <div className="room-desc" style={{ 
+                  fontSize: '12px', 
+                  color: '#999', 
+                  marginTop: '8px',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}>
+                  {room.description}
+                </div>
+              )}
               <div className="room-footer">
                 <div className="host-info">
                   <div className="host-avatar">👨‍💼</div>

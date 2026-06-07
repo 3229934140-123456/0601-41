@@ -35,13 +35,29 @@ const RoomApp: React.FC = () => {
       .sort((a, b) => a.seat - b.seat);
     
     const rows: Participant[][] = [[], [], []];
-    sorted.forEach((p, i) => {
-      const rowIndex = Math.floor(i / 4);
-      if (rowIndex < 3) {
+    sorted.forEach((p) => {
+      const rowIndex = Math.floor((p.seat - 1) / 4);
+      if (rowIndex >= 0 && rowIndex < 3) {
         rows[rowIndex].push(p);
       }
     });
+    for (let r = 0; r < 3; r++) {
+      rows[r].sort((a, b) => a.seat - b.seat);
+    }
     return rows;
+  };
+
+  const getEmptySeatsInRow = (rowIndex: number) => {
+    const row = getSeatsByRow()[rowIndex];
+    const occupiedSeats = new Set(row.map(p => p.seat));
+    const emptySeats: number[] = [];
+    for (let i = 1; i <= 4; i++) {
+      const seatNum = rowIndex * 4 + i;
+      if (!occupiedSeats.has(seatNum)) {
+        emptySeats.push(seatNum);
+      }
+    }
+    return emptySeats;
   };
 
   const handleDragStart = (e: React.DragEvent, participantId: string) => {
@@ -190,32 +206,47 @@ const RoomApp: React.FC = () => {
                     opacity: draggedParticipant === participant.id ? 0.5 : 1,
                   }}
                 >
-                  {participant.group && rowIndex === 0 && (
+                  {participant.group && (
                     <div className="group-label">{participant.group}</div>
                   )}
                   <div className="seat-avatar">{participant.avatar}</div>
                   <div className="seat-name">{participant.name}</div>
+                  <div className="seat-number" style={{ 
+                    position: 'absolute', 
+                    bottom: '4px', 
+                    right: '8px', 
+                    fontSize: '10px', 
+                    color: 'rgba(255,255,255,0.5)',
+                  }}>
+                    #{participant.seat}
+                  </div>
                 </div>
               ))}
-              {Array.from({ length: Math.max(0, 4 - row.length) }).map((_, i) => {
-                const emptySeatNum = (rowIndex * 4) + row.length + i + 1;
-                return (
-                  <div 
-                    key={`empty-${i}`} 
-                    className={`seat ${dragOverSeat === emptySeatNum ? 'drag-over' : ''}`}
-                    onDragOver={(e) => handleDragOver(e, emptySeatNum)}
-                    onDragLeave={handleDragLeave}
-                    onDrop={(e) => handleDrop(e, emptySeatNum)}
-                    style={{
-                      border: dragOverSeat === emptySeatNum ? '2px dashed #667eea' : 'none',
-                      borderRadius: '8px',
-                    }}
-                  >
-                    <div className="seat-avatar" style={{ opacity: 0.3 }}>👤</div>
-                    <div className="seat-name" style={{ opacity: 0.3 }}>空座 {emptySeatNum}</div>
+              {getEmptySeatsInRow(rowIndex).map((seatNum) => (
+                <div 
+                  key={`empty-${seatNum}`} 
+                  className={`seat empty ${dragOverSeat === seatNum ? 'drag-over' : ''}`}
+                  onDragOver={(e) => handleDragOver(e, seatNum)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, seatNum)}
+                  style={{
+                    border: dragOverSeat === seatNum ? '2px dashed #667eea' : '2px dashed rgba(255,255,255,0.1)',
+                    borderRadius: '8px',
+                  }}
+                >
+                  <div className="seat-avatar" style={{ opacity: 0.3 }}>👤</div>
+                  <div className="seat-name" style={{ opacity: 0.3 }}>空座 {seatNum}</div>
+                  <div style={{ 
+                    position: 'absolute', 
+                    bottom: '4px', 
+                    right: '8px', 
+                    fontSize: '10px', 
+                    color: 'rgba(255,255,255,0.3)',
+                  }}>
+                    #{seatNum}
                   </div>
-                );
-              })}
+                </div>
+              ))}
             </div>
           ))}
 
@@ -288,7 +319,7 @@ const RoomApp: React.FC = () => {
                       <div className="avatar">{participant.avatar}</div>
                       <div className="info">
                         <div className="name">{participant.name}</div>
-                        <div className="group">{participant.group} · {participant.online ? '在线' : '离线'}</div>
+                        <div className="group">{participant.group} · 座位{participant.seat} · {participant.online ? '在线' : '离线'}</div>
                       </div>
                       <div className="actions">
                         <button 

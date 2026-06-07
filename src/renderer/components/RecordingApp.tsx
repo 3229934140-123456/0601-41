@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useRecordings, useParticipants, storeActions, getAvatarColor } from '../hooks/useStore';
 
 const RecordingApp: React.FC = () => {
@@ -9,15 +9,15 @@ const RecordingApp: React.FC = () => {
   const [recordingTime, setRecordingTime] = useState(0);
   const [volume, setVolume] = useState(70);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentMusic, setCurrentMusic] = useState('');
-  const audioRef = useRef<HTMLAudioElement>(null);
+  const [currentMusicIndex, setCurrentMusicIndex] = useState(-1);
+  
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const gainNodeRef = useRef<GainNode | null>(null);
+  const oscillatorsRef = useRef<OscillatorNode[]>([]);
+  const intervalRef = useRef<number | null>(null);
+  const noteIndexRef = useRef(0);
+  
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-
-  useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.volume = volume / 100;
-    }
-  }, [volume]);
 
   useEffect(() => {
     if (isRecording) {
@@ -33,6 +33,177 @@ const RecordingApp: React.FC = () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [isRecording]);
+
+  const bgMusicList = [
+    { 
+      id: 'm1', 
+      name: '轻松氛围', 
+      icon: '🎵', 
+      duration: '3:24',
+      notes: [261.63, 293.66, 329.63, 349.23, 392.00, 349.23, 329.63, 293.66],
+      tempo: 400,
+      type: 'sine' as OscillatorType,
+    },
+    { 
+      id: 'm2', 
+      name: '专注思考', 
+      icon: '🎶', 
+      duration: '4:12',
+      notes: [220.00, 246.94, 261.63, 293.66, 329.63, 293.66, 261.63, 246.94],
+      tempo: 600,
+      type: 'triangle' as OscillatorType,
+    },
+    { 
+      id: 'm3', 
+      name: '激情昂扬', 
+      icon: '🎸', 
+      duration: '2:58',
+      notes: [392.00, 440.00, 493.88, 523.25, 587.33, 523.25, 493.88, 440.00],
+      tempo: 200,
+      type: 'square' as OscillatorType,
+    },
+    { 
+      id: 'm4', 
+      name: '舒缓放松', 
+      icon: '🎹', 
+      duration: '5:30',
+      notes: [196.00, 220.00, 246.94, 261.63, 293.66, 261.63, 246.94, 220.00],
+      tempo: 800,
+      type: 'sine' as OscillatorType,
+    },
+  ];
+
+  const stopMusic = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    
+    oscillatorsRef.current.forEach(osc => {
+      try {
+        osc.stop();
+        osc.disconnect();
+      } catch (e) {}
+    });
+    oscillatorsRef.current = [];
+    
+    if (gainNodeRef.current) {
+      try {
+        gainNodeRef.current.disconnect();
+      } catch (e) {}
+      gainNodeRef.current = null;
+    }
+    
+    if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
+      try {
+        audioCtxRef.current.close();
+      } catch (e) {}
+      audioCtxRef.current = null;
+    }
+    
+    noteIndexRef.current = 0;
+    setIsPlaying(false);
+  }, []);
+
+  const playMusic = useCallback((musicIndex: number) => {
+    stopMusic();
+    
+    const music = bgMusicList[musicIndex];
+    if (!music) return;
+
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContext) {
+      console.warn('Web Audio API not supported');
+      setIsPlaying(true);
+      return;
+    }
+
+    const audioCtx = new AudioContext();
+    audioCtxRef.current = audioCtx;
+
+    const gainNode = audioCtx.createGain();
+    gainNode.gain.value = (volume / 100) * 0.3;
+    gainNode.connect(audioCtx.destination);
+    gainNodeRef.current = gainNode;
+
+    noteIndexRef.current = 0;
+
+    const playNextNote = () => {
+      if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') return;
+      if (!gainNodeRef.current) return;
+
+      oscillatorsRef.current.forEach(osc => {
+        try {
+          osc.stop();
+          osc.disconnect();
+        } catch (e) {}
+      });
+      oscillatorsRef.current = [];
+
+      const freq = music.notes[noteIndexRef.current % music.notes.length];
+      
+      const osc = audioCtxRef.current.createOscillator();
+      osc.type = music.type;
+      osc.frequency.value = freq;
+      osc.connect(gainNodeRef.current);
+      osc.start();
+      oscillatorsRef.current.push(osc);
+
+      noteIndexRef.current++;
+    };
+
+    playNextNote();
+    intervalRef.current = window.setInterval(playNextNote, music.tempo);
+    
+    setIsPlaying(true);
+  }, [volume, stopMusic]);
+
+  const toggleMusic = (index: number) => {
+    if (currentMusicIndex === index && isPlaying) {
+      stopMusic();
+    } else {
+      setCurrentMusicIndex(index);
+      playMusic(index);
+    }
+  };
+
+  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newVolume = parseInt(e.target.value);
+    setVolume(newVolume);
+    if (gainNodeRef.current) {
+      gainNodeRef.current.gain.value = (newVolume / 100) * 0.3;
+    }
+  };
+
+  const playPrev = () => {
+    if (bgMusicList.length === 0) return;
+    const prevIndex = currentMusicIndex <= 0 ? bgMusicList.length - 1 : currentMusicIndex - 1;
+    setCurrentMusicIndex(prevIndex);
+    playMusic(prevIndex);
+  };
+
+  const playNext = () => {
+    if (bgMusicList.length === 0) return;
+    const nextIndex = (currentMusicIndex + 1) % bgMusicList.length;
+    setCurrentMusicIndex(nextIndex);
+    playMusic(nextIndex);
+  };
+
+  const togglePlayPause = () => {
+    if (currentMusicIndex < 0) {
+      toggleMusic(0);
+    } else if (isPlaying) {
+      stopMusic();
+    } else {
+      playMusic(currentMusicIndex);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      stopMusic();
+    };
+  }, [stopMusic]);
 
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
@@ -83,27 +254,6 @@ const RecordingApp: React.FC = () => {
       await storeActions.exportAttendanceCSV(result.filePath);
     }
   };
-
-  const toggleMusic = (musicName: string) => {
-    if (currentMusic === musicName && isPlaying) {
-      setIsPlaying(false);
-    } else {
-      setCurrentMusic(musicName);
-      setIsPlaying(true);
-    }
-  };
-
-  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newVolume = parseInt(e.target.value);
-    setVolume(newVolume);
-  };
-
-  const bgMusicList = [
-    { id: 'm1', name: '轻松氛围', icon: '🎵', duration: '3:24' },
-    { id: 'm2', name: '专注思考', icon: '🎶', duration: '4:12' },
-    { id: 'm3', name: '激情昂扬', icon: '🎸', duration: '2:58' },
-    { id: 'm4', name: '舒缓放松', icon: '🎹', duration: '5:30' },
-  ];
 
   const getRoleLabel = (role: string) => {
     switch (role) {
@@ -208,7 +358,7 @@ const RecordingApp: React.FC = () => {
                   <div className="album-art">🎵</div>
                   <div className="song-info">
                     <div className="song-name">
-                      {currentMusic || '未播放'}
+                      {currentMusicIndex >= 0 ? bgMusicList[currentMusicIndex].name : '未播放'}
                     </div>
                     <div className="song-status">
                       {isPlaying ? '正在播放...' : '选择一首歌开始播放'}
@@ -217,19 +367,18 @@ const RecordingApp: React.FC = () => {
                 </div>
 
                 <div className="player-controls">
-                  <button className="player-btn">⏮️</button>
+                  <button className="player-btn" onClick={playPrev}>⏮️</button>
                   <button 
                     className="player-btn play-btn"
-                    onClick={() => currentMusic && setIsPlaying(!isPlaying)}
-                    disabled={!currentMusic}
+                    onClick={togglePlayPause}
                   >
                     {isPlaying ? '⏸️' : '▶️'}
                   </button>
-                  <button className="player-btn">⏭️</button>
+                  <button className="player-btn" onClick={playNext}>⏭️</button>
                 </div>
 
                 <div className="volume-control">
-                  <span>🔊</span>
+                  <span>{volume === 0 ? '🔇' : volume < 50 ? '🔉' : '🔊'}</span>
                   <input
                     type="range"
                     min="0"
@@ -244,11 +393,11 @@ const RecordingApp: React.FC = () => {
 
               <h3>背景音乐列表</h3>
               <div className="music-list">
-                {bgMusicList.map(music => (
+                {bgMusicList.map((music, index) => (
                   <div 
                     key={music.id} 
-                    className={`music-item ${currentMusic === music.name && isPlaying ? 'playing' : ''}`}
-                    onClick={() => toggleMusic(music.name)}
+                    className={`music-item ${currentMusicIndex === index && isPlaying ? 'playing' : ''}`}
+                    onClick={() => toggleMusic(index)}
                   >
                     <div className="music-icon">{music.icon}</div>
                     <div className="music-info">
@@ -256,7 +405,7 @@ const RecordingApp: React.FC = () => {
                       <div className="duration">时长: {music.duration}</div>
                     </div>
                     <button className="action-icon-btn">
-                      {currentMusic === music.name && isPlaying ? '⏸️' : '▶️'}
+                      {currentMusicIndex === index && isPlaying ? '⏸️' : '▶️'}
                     </button>
                   </div>
                 ))}
