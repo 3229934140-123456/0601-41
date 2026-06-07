@@ -5,12 +5,20 @@ const LobbyApp: React.FC = () => {
   const rooms = useRooms();
   const currentRoom = useCurrentRoom();
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [viewMode, setViewMode] = useState<'card' | 'schedule'>('card');
+  const [scheduleFilter, setScheduleFilter] = useState<'today' | 'week' | 'all'>('today');
+  
   const [newRoom, setNewRoom] = useState({
     name: '',
     theme: '科技蓝',
     capacity: 30,
     permission: 'invite',
+    startTime: '',
+    endTime: '',
+    topic: '',
+    notes: '',
   });
+
   const [filter, setFilter] = useState('all');
 
   const themes = [
@@ -20,20 +28,84 @@ const LobbyApp: React.FC = () => {
     { name: '温馨橙', class: 'theme-orange', color: '#f5576c' },
   ];
 
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'active': return '进行中';
-      case 'inactive': return '未开始';
-      case '进行中': return '进行中';
-      case '未开始': return '未开始';
-      default: return status;
-    }
+  const getStatusText = (room: Room) => {
+    if (room.status === 'ended') return '已结束';
+    if (room.status === 'active' || room.status === '进行中') return '进行中';
+    if (room.status === 'inactive' || room.status === '未开始') return '未开始';
+    return room.status;
   };
 
-  const getStatusClass = (status: string) => {
-    if (status === 'active' || status === '进行中') return 'status-active';
+  const getStatusClass = (room: Room) => {
+    if (room.status === 'ended') return 'status-ended';
+    if (room.status === 'active' || room.status === '进行中') return 'status-active';
     return 'status-inactive';
   };
+
+  const getThemeBg = (theme: string) => {
+    if (theme.startsWith('linear-gradient')) return theme;
+    const t = themes.find(th => th.name === theme);
+    return t ? t.color : '#667eea';
+  };
+
+  const formatTime = (datetime?: string) => {
+    if (!datetime) return '';
+    return datetime.split(' ')[1] || datetime;
+  };
+
+  const formatDate = (datetime?: string) => {
+    if (!datetime) return '';
+    return datetime.split(' ')[0] || datetime;
+  };
+
+  const isToday = (dateStr: string) => {
+    const today = new Date().toISOString().split('T')[0];
+    return dateStr.startsWith(today) || dateStr === '2026-06-08';
+  };
+
+  const isThisWeek = (dateStr: string) => {
+    if (isToday(dateStr)) return true;
+    const roomDate = new Date(dateStr);
+    const today = new Date('2026-06-08');
+    const diffDays = Math.floor((roomDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    return diffDays >= 0 && diffDays <= 6;
+  };
+
+  const filteredRooms = useMemo(() => {
+    let result = rooms;
+    
+    if (filter === 'active') {
+      result = result.filter(r => r.status === 'active' || r.status === '进行中');
+    } else if (filter === 'scheduled') {
+      result = result.filter(r => r.status === 'inactive' || r.status === '未开始');
+    } else if (filter === 'ended') {
+      result = result.filter(r => r.status === 'ended');
+    }
+
+    if (viewMode === 'schedule') {
+      if (scheduleFilter === 'today') {
+        result = result.filter(r => r.startTime && isToday(r.startTime));
+      } else if (scheduleFilter === 'week') {
+        result = result.filter(r => r.startTime && isThisWeek(r.startTime));
+      }
+    }
+
+    return result;
+  }, [rooms, filter, viewMode, scheduleFilter]);
+
+  const totalOnline = useMemo(() => 
+    rooms.reduce((sum, r) => sum + r.online, 0), 
+    [rooms]
+  );
+
+  const activeCount = useMemo(() => 
+    rooms.filter(r => r.status === 'active' || r.status === '进行中').length, 
+    [rooms]
+  );
+
+  const scheduledCount = useMemo(() => 
+    rooms.filter(r => r.status === 'inactive' || r.status === '未开始').length, 
+    [rooms]
+  );
 
   const handleCreateRoom = async () => {
     if (!newRoom.name.trim()) return;
@@ -43,10 +115,23 @@ const LobbyApp: React.FC = () => {
       theme: newRoom.theme,
       capacity: newRoom.capacity,
       permission: newRoom.permission,
+      startTime: newRoom.startTime,
+      endTime: newRoom.endTime,
+      topic: newRoom.topic,
+      notes: newRoom.notes,
     });
 
     setShowCreateModal(false);
-    setNewRoom({ name: '', theme: '科技蓝', capacity: 30, permission: 'invite' });
+    setNewRoom({ 
+      name: '', 
+      theme: '科技蓝', 
+      capacity: 30, 
+      permission: 'invite',
+      startTime: '',
+      endTime: '',
+      topic: '',
+      notes: '',
+    });
   };
 
   const enterRoom = async (room: Room) => {
@@ -65,31 +150,6 @@ const LobbyApp: React.FC = () => {
   const openWindow = (name: string) => {
     storeActions.openWindow(name);
   };
-
-  const getThemeBg = (theme: string) => {
-    if (theme.startsWith('linear-gradient')) return theme;
-    const t = themes.find(th => th.name === theme);
-    return t ? t.color : '#667eea';
-  };
-
-  const filteredRooms = useMemo(() => {
-    return rooms.filter(room => {
-      if (filter === 'all') return true;
-      if (filter === 'active') return room.status === 'active' || room.status === '进行中';
-      if (filter === 'scheduled') return room.status === 'inactive' || room.status === '未开始';
-      return true;
-    });
-  }, [rooms, filter]);
-
-  const totalOnline = useMemo(() => 
-    rooms.reduce((sum, r) => sum + r.online, 0), 
-    [rooms]
-  );
-
-  const activeCount = useMemo(() => 
-    rooms.filter(r => r.status === 'active' || r.status === '进行中').length, 
-    [rooms]
-  );
 
   return (
     <div className="lobby-container">
@@ -133,78 +193,198 @@ const LobbyApp: React.FC = () => {
             <div className="number">{activeCount}</div>
             <div className="label">进行中</div>
           </div>
+          <div className="stat-item">
+            <div className="number">{scheduledCount}</div>
+            <div className="label">待开始</div>
+          </div>
         </div>
       </div>
 
       <div className="room-section">
         <div className="section-header">
-          <h2>虚拟会议室</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <h2>虚拟会议室</h2>
+            <div className="view-toggle">
+              <button 
+                className={`toggle-btn ${viewMode === 'card' ? 'active' : ''}`}
+                onClick={() => setViewMode('card')}
+              >
+                📦 卡片
+              </button>
+              <button 
+                className={`toggle-btn ${viewMode === 'schedule' ? 'active' : ''}`}
+                onClick={() => setViewMode('schedule')}
+              >
+                📅 日程
+              </button>
+            </div>
+          </div>
           <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
             ➕ 创建房间
           </button>
         </div>
 
         <div className="filter-bar">
-          <div 
-            className={`filter-item ${filter === 'all' ? 'active' : ''}`}
-            onClick={() => setFilter('all')}
-          >
-            全部
-          </div>
-          <div 
-            className={`filter-item ${filter === 'active' ? 'active' : ''}`}
-            onClick={() => setFilter('active')}
-          >
-            进行中
-          </div>
-          <div 
-            className={`filter-item ${filter === 'scheduled' ? 'active' : ''}`}
-            onClick={() => setFilter('scheduled')}
-          >
-            未开始
-          </div>
+          {viewMode === 'card' && (
+            <>
+              <div 
+                className={`filter-item ${filter === 'all' ? 'active' : ''}`}
+                onClick={() => setFilter('all')}
+              >
+                全部
+              </div>
+              <div 
+                className={`filter-item ${filter === 'active' ? 'active' : ''}`}
+                onClick={() => setFilter('active')}
+              >
+                进行中
+              </div>
+              <div 
+                className={`filter-item ${filter === 'scheduled' ? 'active' : ''}`}
+                onClick={() => setFilter('scheduled')}
+              >
+                未开始
+              </div>
+              <div 
+                className={`filter-item ${filter === 'ended' ? 'active' : ''}`}
+                onClick={() => setFilter('ended')}
+              >
+                已结束
+              </div>
+            </>
+          )}
+          {viewMode === 'schedule' && (
+            <>
+              <div 
+                className={`filter-item ${scheduleFilter === 'today' ? 'active' : ''}`}
+                onClick={() => setScheduleFilter('today')}
+              >
+                今天
+              </div>
+              <div 
+                className={`filter-item ${scheduleFilter === 'week' ? 'active' : ''}`}
+                onClick={() => setScheduleFilter('week')}
+              >
+                本周
+              </div>
+              <div 
+                className={`filter-item ${scheduleFilter === 'all' ? 'active' : ''}`}
+                onClick={() => setScheduleFilter('all')}
+              >
+                全部
+              </div>
+            </>
+          )}
         </div>
 
-        <div className="room-grid">
-          {filteredRooms.map(room => (
-            <div 
-              key={room.id} 
-              className="card room-card"
-              onClick={() => enterRoom(room)}
-            >
+        {viewMode === 'card' && (
+          <div className="room-grid">
+            {filteredRooms.map(room => (
               <div 
-                className="room-theme"
-                style={{ background: getThemeBg(room.theme) }}
-              ></div>
-              <h3>{room.name}</h3>
-              <div className="room-info">
-                <span>👥 {room.online}/{room.capacity}</span>
-                <span className={`status-badge ${getStatusClass(room.status)}`}>
-                  {getStatusText(room.status)}
-                </span>
-              </div>
-              {room.description && (
-                <div className="room-desc" style={{ 
-                  fontSize: '12px', 
-                  color: '#999', 
-                  marginTop: '8px',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}>
-                  {room.description}
+                key={room.id} 
+                className="card room-card"
+                onClick={() => enterRoom(room)}
+              >
+                <div 
+                  className="room-theme"
+                  style={{ background: getThemeBg(room.theme) }}
+                ></div>
+                <h3>{room.name}</h3>
+                <div className="room-info">
+                  <span>👥 {room.online}/{room.capacity}</span>
+                  <span className={`status-badge ${getStatusClass(room)}`}>
+                    {getStatusText(room)}
+                  </span>
                 </div>
-              )}
-              <div className="room-footer">
-                <div className="host-info">
-                  <div className="host-avatar">👨‍💼</div>
-                  <span>主持人：{room.host}</span>
+                {room.topic && (
+                  <div className="room-topic" style={{ 
+                    fontSize: '12px', 
+                    color: '#667eea', 
+                    marginTop: '8px',
+                    fontWeight: '500',
+                  }}>
+                    📌 {room.topic}
+                  </div>
+                )}
+                {room.startTime && (
+                  <div style={{ 
+                    fontSize: '12px', 
+                    color: '#999', 
+                    marginTop: '6px',
+                  }}>
+                    ⏰ {room.startTime}
+                  </div>
+                )}
+                {room.description && (
+                  <div style={{ 
+                    fontSize: '12px', 
+                    color: '#999', 
+                    marginTop: '8px',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}>
+                    {room.description}
+                  </div>
+                )}
+                <div className="room-footer">
+                  <div className="host-info">
+                    <div className="host-avatar">👨‍💼</div>
+                    <span>主持人：{room.host}</span>
+                  </div>
+                  <button className="btn btn-primary enter-btn">进入</button>
                 </div>
-                <button className="btn btn-primary enter-btn">进入</button>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
+
+        {viewMode === 'schedule' && (
+          <div className="schedule-list">
+            {filteredRooms.length === 0 ? (
+              <div className="empty-state">
+                <div className="icon">📅</div>
+                <p>暂无会议安排</p>
+              </div>
+            ) : (
+              filteredRooms.map(room => (
+                <div 
+                  key={room.id} 
+                  className="schedule-item"
+                  onClick={() => enterRoom(room)}
+                >
+                  <div className="schedule-time">
+                    <div className="time-main">{formatTime(room.startTime)}</div>
+                    <div className="time-sub">{formatDate(room.startTime)}</div>
+                  </div>
+                  <div 
+                    className="schedule-bar"
+                    style={{ background: getThemeBg(room.theme) }}
+                  ></div>
+                  <div className="schedule-info">
+                    <div className="schedule-name">{room.name}</div>
+                    {room.topic && (
+                      <div className="schedule-topic">📌 {room.topic}</div>
+                    )}
+                    <div className="schedule-meta">
+                      <span>👤 {room.host}</span>
+                      <span>👥 {room.online}/{room.capacity} 人</span>
+                      {room.endTime && <span>⏱️ {formatTime(room.startTime)} - {formatTime(room.endTime)}</span>}
+                    </div>
+                  </div>
+                  <div className="schedule-status">
+                    <span className={`status-badge ${getStatusClass(room)}`}>
+                      {getStatusText(room)}
+                    </span>
+                    <button className="btn btn-primary" style={{ marginTop: '8px' }}>
+                      进入
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
       </div>
 
       {showCreateModal && (
@@ -213,13 +393,42 @@ const LobbyApp: React.FC = () => {
             <h2>创建虚拟房间</h2>
             
             <div className="form-group">
-              <label>房间名称</label>
+              <label>房间名称 *</label>
               <input 
                 type="text" 
                 placeholder="请输入房间名称"
                 value={newRoom.name}
                 onChange={e => setNewRoom({...newRoom, name: e.target.value})}
               />
+            </div>
+
+            <div className="form-group">
+              <label>培训主题</label>
+              <input 
+                type="text" 
+                placeholder="请输入培训主题"
+                value={newRoom.topic}
+                onChange={e => setNewRoom({...newRoom, topic: e.target.value})}
+              />
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label>开始时间</label>
+                <input 
+                  type="datetime-local" 
+                  value={newRoom.startTime.replace(' ', 'T')}
+                  onChange={e => setNewRoom({...newRoom, startTime: e.target.value.replace('T', ' ')})}
+                />
+              </div>
+              <div className="form-group">
+                <label>结束时间</label>
+                <input 
+                  type="datetime-local" 
+                  value={newRoom.endTime.replace(' ', 'T')}
+                  onChange={e => setNewRoom({...newRoom, endTime: e.target.value.replace('T', ' ')})}
+                />
+              </div>
             </div>
 
             <div className="form-group">
@@ -254,30 +463,41 @@ const LobbyApp: React.FC = () => {
               </div>
             </div>
 
-            <div className="form-group">
-              <label>容纳人数</label>
-              <select 
-                value={newRoom.capacity}
-                onChange={e => setNewRoom({...newRoom, capacity: Number(e.target.value)})}
-              >
-                <option value={10}>10 人</option>
-                <option value={30}>30 人</option>
-                <option value={50}>50 人</option>
-                <option value={100}>100 人</option>
-                <option value={200}>200 人</option>
-              </select>
+            <div className="form-row">
+              <div className="form-group">
+                <label>容纳人数</label>
+                <select 
+                  value={newRoom.capacity}
+                  onChange={e => setNewRoom({...newRoom, capacity: Number(e.target.value)})}
+                >
+                  <option value={10}>10 人</option>
+                  <option value={30}>30 人</option>
+                  <option value={50}>50 人</option>
+                  <option value={100}>100 人</option>
+                  <option value={200}>200 人</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>入场权限</label>
+                <select 
+                  value={newRoom.permission}
+                  onChange={e => setNewRoom({...newRoom, permission: e.target.value})}
+                >
+                  <option value="invite">仅邀请可入</option>
+                  <option value="password">密码进入</option>
+                  <option value="open">公开开放</option>
+                </select>
+              </div>
             </div>
 
             <div className="form-group">
-              <label>入场权限</label>
-              <select 
-                value={newRoom.permission}
-                onChange={e => setNewRoom({...newRoom, permission: e.target.value})}
-              >
-                <option value="invite">仅邀请可入</option>
-                <option value="password">密码进入</option>
-                <option value="open">公开开放</option>
-              </select>
+              <label>备注</label>
+              <textarea
+                placeholder="请输入备注信息"
+                value={newRoom.notes}
+                onChange={e => setNewRoom({...newRoom, notes: e.target.value})}
+                style={{ minHeight: '60px', resize: 'vertical' }}
+              />
             </div>
 
             <div className="modal-actions">

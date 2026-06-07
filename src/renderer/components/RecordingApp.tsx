@@ -1,15 +1,21 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { useRecordings, useParticipants, storeActions, getAvatarColor } from '../hooks/useStore';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useRecordings, useParticipants, useActivities, useGroups, storeActions, getAvatarColor } from '../hooks/useStore';
 
 const RecordingApp: React.FC = () => {
   const recordings = useRecordings();
   const participants = useParticipants();
+  const activities = useActivities();
+  const groups = useGroups();
   const [activeTab, setActiveTab] = useState('recordings');
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [volume, setVolume] = useState(70);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentMusicIndex, setCurrentMusicIndex] = useState(-1);
+  const [reviewFilter, setReviewFilter] = useState({
+    search: '',
+    group: 'all',
+  });
   
   const audioCtxRef = useRef<AudioContext | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
@@ -258,13 +264,63 @@ const RecordingApp: React.FC = () => {
   const getRoleLabel = (role: string) => {
     switch (role) {
       case 'host': return '主持人';
-      case 'cohost': return '副主持';
+      case 'cohost': return '联席主持';
       default: return '参会者';
     }
   };
 
   const openWindow = (name: string) => {
     storeActions.openWindow(name);
+  };
+
+  const filteredReviewParticipants = useMemo(() => {
+    let result = participants;
+    if (reviewFilter.search) {
+      const search = reviewFilter.search.toLowerCase();
+      result = result.filter(p => p.name.toLowerCase().includes(search));
+    }
+    if (reviewFilter.group && reviewFilter.group !== 'all') {
+      result = result.filter(p => p.group === reviewFilter.group);
+    }
+    return result;
+  }, [participants, reviewFilter]);
+
+  const totalRecordingSeconds = useMemo(() => 
+    recordings.reduce((acc, r) => acc + r.durationSeconds, 0), 
+    [recordings]
+  );
+
+  const completedTasks = useMemo(() => 
+    activities.tasks.filter(t => t.status === 'completed').length, 
+    [activities.tasks]
+  );
+
+  const exportReviewCSV = async () => {
+    const result = await storeActions.showSaveDialog({
+      defaultPath: '会议复盘记录.csv',
+      filters: [{ name: 'CSV File', extensions: ['csv'] }],
+    });
+
+    if (!result.canceled && result.filePath) {
+      await storeActions.exportReviewCSV(result.filePath, {
+        search: reviewFilter.search,
+        group: reviewFilter.group,
+      });
+    }
+  };
+
+  const exportReviewText = async () => {
+    const result = await storeActions.showSaveDialog({
+      defaultPath: '会议复盘记录.txt',
+      filters: [{ name: 'Text File', extensions: ['txt'] }],
+    });
+
+    if (!result.canceled && result.filePath) {
+      await storeActions.exportReviewText(result.filePath, {
+        search: reviewFilter.search,
+        group: reviewFilter.group,
+      });
+    }
   };
 
   return (
@@ -301,6 +357,12 @@ const RecordingApp: React.FC = () => {
               onClick={() => setActiveTab('attendance')}
             >
               👥 参会记录
+            </button>
+            <button
+              className={`tab-btn ${activeTab === 'review' ? 'active' : ''}`}
+              onClick={() => setActiveTab('review')}
+            >
+              📊 复盘记录
             </button>
           </div>
 
@@ -460,6 +522,259 @@ const RecordingApp: React.FC = () => {
                     <div className={`status-badge ${p.online ? 'online' : 'offline'}`}>
                       {p.online ? '在线' : '离线'}
                     </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'review' && (
+            <div className="tab-content">
+              <div className="attendance-header">
+                <h3>会议复盘</h3>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button className="btn btn-secondary" onClick={exportReviewText}>
+                    📄 导出文本
+                  </button>
+                  <button className="btn btn-primary" onClick={exportReviewCSV}>
+                    📥 导出CSV
+                  </button>
+                </div>
+              </div>
+
+              <div className="review-filters">
+                <input
+                  type="text"
+                  placeholder="🔍 搜索参会者姓名..."
+                  value={reviewFilter.search}
+                  onChange={(e) => setReviewFilter({...reviewFilter, search: e.target.value})}
+                  style={{
+                    flex: 1,
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    color: 'white',
+                    fontSize: '13px',
+                  }}
+                />
+                <select
+                  value={reviewFilter.group}
+                  onChange={(e) => setReviewFilter({...reviewFilter, group: e.target.value})}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    color: 'white',
+                    fontSize: '13px',
+                  }}
+                >
+                  <option value="all">全部分组</option>
+                  {groups.map(g => <option key={g} value={g}>{g}</option>)}
+                </select>
+              </div>
+
+              <div className="review-summary">
+                <div className="summary-item">
+                  <div className="summary-icon">👥</div>
+                  <div>
+                    <div className="summary-value">{filteredReviewParticipants.length}</div>
+                    <div className="summary-label">参会人数</div>
+                  </div>
+                </div>
+                <div className="summary-item">
+                  <div className="summary-icon">⏱️</div>
+                  <div>
+                    <div className="summary-value">{formatDuration(totalRecordingSeconds)}</div>
+                    <div className="summary-label">总录制时长</div>
+                  </div>
+                </div>
+                <div className="summary-item">
+                  <div className="summary-icon">✋</div>
+                  <div>
+                    <div className="summary-value">{activities.handRaises.length}</div>
+                    <div className="summary-label">举手次数</div>
+                  </div>
+                </div>
+                <div className="summary-item">
+                  <div className="summary-icon">📊</div>
+                  <div>
+                    <div className="summary-value">{activities.votes.length}</div>
+                    <div className="summary-label">投票数</div>
+                  </div>
+                </div>
+                <div className="summary-item">
+                  <div className="summary-icon">🏆</div>
+                  <div>
+                    <div className="summary-value">{completedTasks}/{activities.tasks.length}</div>
+                    <div className="summary-label">闯关任务</div>
+                  </div>
+                </div>
+                <div className="summary-item">
+                  <div className="summary-icon">🎬</div>
+                  <div>
+                    <div className="summary-value">{recordings.length}</div>
+                    <div className="summary-label">录制片段</div>
+                  </div>
+                </div>
+              </div>
+
+              <h3 style={{ marginTop: '20px' }}>参会者详情</h3>
+              <div className="review-list">
+                {filteredReviewParticipants.map((p, index) => {
+                  const handRaiseCount = activities.handRaises.filter(h => h.name === p.name).length;
+                  return (
+                    <div key={p.id} className="review-item">
+                      <div className="review-index">{index + 1}</div>
+                      <div className="avatar" style={{ backgroundColor: getAvatarColor(p.name) }}>
+                        {p.avatar}
+                      </div>
+                      <div className="info">
+                        <div className="name">
+                          {p.name}
+                          {p.role === 'cohost' && (
+                            <span style={{ 
+                              fontSize: '10px', 
+                              background: 'rgba(255, 185, 87, 0.2)', 
+                              color: '#ffb957', 
+                              padding: '2px 6px', 
+                              borderRadius: '4px',
+                              marginLeft: '6px',
+                            }}>
+                              联席主持
+                            </span>
+                          )}
+                        </div>
+                        <div className="details">
+                          {p.group} · 座位{p.seat} · 加入 {p.joinTime}
+                        </div>
+                      </div>
+                      <div className="review-stats">
+                        <div className="review-stat">
+                          <span className="stat-num">{handRaiseCount}</span>
+                          <span className="stat-label">举手</span>
+                        </div>
+                        <div className="review-stat">
+                          <span className="stat-num">{activities.votes.length > 0 ? '✓' : '-'}</span>
+                          <span className="stat-label">投票</span>
+                        </div>
+                        <div className="review-stat">
+                          <span className="stat-num">{p.online ? '在线' : '离线'}</span>
+                          <span className="stat-label">状态</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                {filteredReviewParticipants.length === 0 && (
+                  <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
+                    暂无匹配的参会者
+                  </div>
+                )}
+              </div>
+
+              <h3 style={{ marginTop: '20px' }}>投票记录</h3>
+              <div className="vote-list">
+                {activities.votes.map((vote, vIndex) => (
+                  <div key={vote.id} className="vote-item" style={{ 
+                    background: 'rgba(255, 255, 255, 0.03)',
+                    borderRadius: '10px',
+                    padding: '14px',
+                    marginBottom: '10px',
+                  }}>
+                    <div style={{ fontWeight: '500', marginBottom: '10px' }}>
+                      {vIndex + 1}. {vote.question}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {vote.options.map((opt, oIndex) => {
+                        const total = vote.results.reduce((a, b) => a + b, 0);
+                        const percent = total > 0 ? Math.round((vote.results[oIndex] / total) * 100) : 0;
+                        return (
+                          <div key={oIndex} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span style={{ flex: 1, fontSize: '12px', color: '#aaa' }}>{opt}</span>
+                            <div style={{ 
+                              flex: 2, 
+                              height: '8px', 
+                              background: 'rgba(255, 255, 255, 0.1)',
+                              borderRadius: '4px',
+                              overflow: 'hidden',
+                            }}>
+                              <div style={{ 
+                                width: `${percent}%`, 
+                                height: '100%', 
+                                background: 'linear-gradient(90deg, #667eea, #764ba2)',
+                                borderRadius: '4px',
+                              }}></div>
+                            </div>
+                            <span style={{ fontSize: '12px', color: '#888', minWidth: '50px', textAlign: 'right' }}>
+                              {vote.results[oIndex]}票 ({percent}%)
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+                {activities.votes.length === 0 && (
+                  <div style={{ textAlign: 'center', padding: '20px', color: '#666', fontSize: '13px' }}>
+                    暂无投票记录
+                  </div>
+                )}
+              </div>
+
+              <h3 style={{ marginTop: '20px' }}>闯关任务</h3>
+              <div className="task-list">
+                {activities.tasks.map((task, tIndex) => (
+                  <div key={task.id} className="task-item" style={{ 
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '12px 14px',
+                    background: 'rgba(255, 255, 255, 0.03)',
+                    borderRadius: '10px',
+                    marginBottom: '8px',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span style={{ 
+                        width: '28px',
+                        height: '28px',
+                        borderRadius: '50%',
+                        background: task.status === 'completed' 
+                          ? 'rgba(56, 239, 125, 0.2)' 
+                          : task.status === 'active' 
+                            ? 'rgba(102, 126, 234, 0.2)' 
+                            : 'rgba(255, 255, 255, 0.1)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '14px',
+                        color: task.status === 'completed' ? '#38ef7d' : task.status === 'active' ? '#667eea' : '#666',
+                      }}>
+                        {task.status === 'completed' ? '✓' : tIndex + 1}
+                      </span>
+                      <div>
+                        <div style={{ fontSize: '13px' }}>{task.name}</div>
+                        <div style={{ fontSize: '11px', color: '#888' }}>{task.reward}</div>
+                      </div>
+                    </div>
+                    <span style={{ 
+                      fontSize: '11px',
+                      padding: '4px 10px',
+                      borderRadius: '12px',
+                      background: task.status === 'completed' 
+                        ? 'rgba(56, 239, 125, 0.15)' 
+                        : task.status === 'active' 
+                          ? 'rgba(102, 126, 234, 0.15)' 
+                          : 'rgba(255, 255, 255, 0.05)',
+                      color: task.status === 'completed' 
+                        ? '#38ef7d' 
+                        : task.status === 'active' 
+                          ? '#667eea' 
+                          : '#666',
+                    }}>
+                      {task.status === 'completed' ? '已完成' : task.status === 'active' ? '进行中' : '未解锁'}
+                    </span>
                   </div>
                 ))}
               </div>

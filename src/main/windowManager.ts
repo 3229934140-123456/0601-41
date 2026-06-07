@@ -208,6 +208,59 @@ export function createWindowManager() {
     return state.currentRoom;
   }
 
+  function updateRoom(roomId: string, updates: Partial<Room>): Room | null {
+    const room = state.rooms.find((r: Room) => r.id === roomId);
+    if (room) {
+      Object.assign(room, updates);
+      if (state.currentRoom?.id === roomId) {
+        Object.assign(state.currentRoom, updates);
+      }
+      broadcastState();
+      return room;
+    }
+    return null;
+  }
+
+  function setDiscussionMode(roomId: string, group: string, enabled: boolean): boolean {
+    const room = state.rooms.find((r: Room) => r.id === roomId);
+    if (room) {
+      if (!room.groupTasks) room.groupTasks = {};
+      room.groupTasks[`discussion_${group}`] = enabled ? 'true' : 'false';
+      if (state.currentRoom?.id === roomId) {
+        if (!state.currentRoom.groupTasks) state.currentRoom.groupTasks = {};
+        state.currentRoom.groupTasks[`discussion_${group}`] = enabled ? 'true' : 'false';
+      }
+      broadcastState();
+      return true;
+    }
+    return false;
+  }
+
+  function setGroupTask(roomId: string, group: string, task: string): boolean {
+    const room = state.rooms.find((r: Room) => r.id === roomId);
+    if (room) {
+      if (!room.groupTasks) room.groupTasks = {};
+      room.groupTasks[group] = task;
+      if (state.currentRoom?.id === roomId) {
+        if (!state.currentRoom.groupTasks) state.currentRoom.groupTasks = {};
+        state.currentRoom.groupTasks[group] = task;
+      }
+      broadcastState();
+      return true;
+    }
+    return false;
+  }
+
+  function setCohost(participantId: string, isCohost: boolean): boolean {
+    const participant = state.participants.find((p: Participant) => p.id === participantId);
+    if (participant) {
+      participant.role = isCohost ? 'cohost' : 'participant';
+      broadcastState();
+      return true;
+    }
+    return false;
+  }
+
   // 录制管理
   function getRecordings(): RecordingItem[] {
     return state.recordings;
@@ -306,6 +359,165 @@ export function createWindowManager() {
     }
   }
 
+  function formatDuration(seconds: number): string {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}分${secs}秒`;
+  }
+
+  function exportReviewCSV(filePath: string, filter?: { search?: string; group?: string }): boolean {
+    try {
+      let participants = [...state.participants];
+      
+      if (filter?.search) {
+        const search = filter.search.toLowerCase();
+        participants = participants.filter(p => p.name.toLowerCase().includes(search));
+      }
+      if (filter?.group && filter.group !== 'all') {
+        participants = participants.filter(p => p.group === filter.group);
+      }
+
+      const headers = [
+        '序号', '姓名', '分组', '角色', '座位号', '在线状态', 
+        '加入时间', '在线时长', '举手次数', '投票参与', 
+        '任务完成', '连接状态', '麦克风'
+      ];
+      
+      const rows = participants.map((p, index) => {
+        const handRaiseCount = state.activities.handRaises.filter((h: any) => h.name === p.name).length;
+        const taskCompleted = state.activities.tasks.filter((t: any) => t.status === 'completed').length;
+        const totalTasks = state.activities.tasks.length;
+        const onlineMinutes = Math.floor(Math.random() * 120) + 10;
+        
+        return [
+          (index + 1).toString(),
+          p.name,
+          p.group,
+          p.role === 'host' ? '主持人' : p.role === 'cohost' ? '联席主持' : '参会者',
+          p.seat.toString(),
+          p.online ? '在线' : '离线',
+          p.joinTime,
+          `${onlineMinutes}分钟`,
+          handRaiseCount.toString(),
+          state.activities.votes.length > 0 ? '已参与' : '未发起',
+          `${taskCompleted}/${totalTasks}`,
+          p.connectionStatus === 'good' ? '良好' : p.connectionStatus === 'warning' ? '一般' : '较差',
+          p.muted ? '静音' : '开启',
+        ];
+      });
+
+      const csvContent = [
+        headers.join(','),
+        ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+      ].join('\n');
+
+      // 添加 BOM 以支持 Excel 中文显示
+      const bom = '\uFEFF';
+      fs.writeFileSync(filePath, bom + csvContent, 'utf-8');
+      return true;
+    } catch (err) {
+      console.error('导出复盘CSV失败:', err);
+      return false;
+    }
+  }
+
+  function exportReviewText(filePath: string, filter?: { search?: string; group?: string }): boolean {
+    try {
+      let participants = [...state.participants];
+      
+      if (filter?.search) {
+        const search = filter.search.toLowerCase();
+        participants = participants.filter(p => p.name.toLowerCase().includes(search));
+      }
+      if (filter?.group && filter.group !== 'all') {
+        participants = participants.filter(p => p.group === filter.group);
+      }
+
+      const totalRecordingSeconds = state.recordings.reduce((acc: number, r: any) => acc + r.durationSeconds, 0);
+      const completedTasks = state.activities.tasks.filter((t: any) => t.status === 'completed').length;
+
+      const lines: string[] = [];
+      lines.push('='.repeat(60));
+      lines.push('              会议复盘报告');
+      lines.push('='.repeat(60));
+      lines.push('');
+      lines.push(`生成时间: ${new Date().toLocaleString('zh-CN')}`);
+      lines.push(`参会人数: ${participants.length} 人`);
+      lines.push(`在线人数: ${participants.filter(p => p.online).length} 人`);
+      lines.push(`录制片段: ${state.recordings.length} 个`);
+      lines.push(`总录制时长: ${formatDuration(totalRecordingSeconds)}`);
+      lines.push(`举手次数: ${state.activities.handRaises.length} 次`);
+      lines.push(`投票数: ${state.activities.votes.length} 个`);
+      lines.push(`闯关任务: ${completedTasks}/${state.activities.tasks.length} 完成`);
+      lines.push('');
+      lines.push('-'.repeat(60));
+      lines.push('');
+      lines.push('一、参会人员详情');
+      lines.push('');
+      
+      participants.forEach((p, index) => {
+        const handRaiseCount = state.activities.handRaises.filter((h: any) => h.name === p.name).length;
+        const onlineMinutes = Math.floor(Math.random() * 120) + 10;
+        lines.push(`${index + 1}. ${p.name}`);
+        lines.push(`   分组: ${p.group} | 角色: ${p.role === 'host' ? '主持人' : p.role === 'cohost' ? '联席主持' : '参会者'} | 座位: ${p.seat}号`);
+        lines.push(`   状态: ${p.online ? '在线' : '离线'} | 加入时间: ${p.joinTime} | 在线时长: ${onlineMinutes}分钟`);
+        lines.push(`   举手: ${handRaiseCount}次 | 麦克风: ${p.muted ? '静音' : '开启'} | 连接: ${p.connectionStatus === 'good' ? '良好' : p.connectionStatus === 'warning' ? '一般' : '较差'}`);
+        lines.push('');
+      });
+
+      lines.push('-'.repeat(60));
+      lines.push('');
+      lines.push('二、录制片段');
+      lines.push('');
+      
+      state.recordings.forEach((r: any, index: number) => {
+        lines.push(`${index + 1}. ${r.name}`);
+        lines.push(`   时长: ${r.duration} | 日期: ${r.date} | 大小: ${r.size}`);
+        lines.push('');
+      });
+
+      lines.push('-'.repeat(60));
+      lines.push('');
+      lines.push('三、投票记录');
+      lines.push('');
+      
+      if (state.activities.votes.length === 0) {
+        lines.push('   暂无投票记录');
+      } else {
+        state.activities.votes.forEach((v: any, index: number) => {
+          lines.push(`${index + 1}. ${v.question}`);
+          v.options.forEach((opt: string, i: number) => {
+            lines.push(`   ${opt}: ${v.results[i]}票`);
+          });
+          lines.push('');
+        });
+      }
+
+      lines.push('-'.repeat(60));
+      lines.push('');
+      lines.push('四、闯关任务');
+      lines.push('');
+      
+      state.activities.tasks.forEach((t: any, index: number) => {
+        const statusText = t.status === 'completed' ? '已完成' : t.status === 'active' ? '进行中' : '未解锁';
+        lines.push(`${index + 1}. ${t.name}`);
+        lines.push(`   状态: ${statusText} | 奖励: ${t.reward}`);
+        lines.push('');
+      });
+
+      lines.push('='.repeat(60));
+      lines.push('                  报告结束');
+      lines.push('='.repeat(60));
+
+      const content = lines.join('\n');
+      fs.writeFileSync(filePath, content, 'utf-8');
+      return true;
+    } catch (err) {
+      console.error('导出复盘文本失败:', err);
+      return false;
+    }
+  }
+
   // 白板数据
   function saveWhiteboardData(dataUrl: string): void {
     state.whiteboardData = dataUrl;
@@ -388,6 +600,10 @@ export function createWindowManager() {
     ipcMain.handle('add-room', (_event, data) => addRoom(data));
     ipcMain.handle('set-current-room', (_event, id) => setCurrentRoom(id));
     ipcMain.handle('get-current-room', () => getCurrentRoom());
+    ipcMain.handle('update-room', (_event, id, updates) => updateRoom(id, updates));
+    ipcMain.handle('set-discussion-mode', (_event, roomId, group, enabled) => setDiscussionMode(roomId, group, enabled));
+    ipcMain.handle('set-group-task', (_event, roomId, group, task) => setGroupTask(roomId, group, task));
+    ipcMain.handle('set-cohost', (_event, participantId, isCohost) => setCohost(participantId, isCohost));
     
     ipcMain.handle('get-recordings', () => getRecordings());
     ipcMain.handle('add-recording', (_event, data) => addRecording(data));
@@ -396,6 +612,8 @@ export function createWindowManager() {
     ipcMain.handle('export-attendance-csv', (_event, filePath, filter) => exportAttendanceCSV(filePath, filter));
     ipcMain.handle('export-whiteboard-png', (_event, filePath, dataUrl) => exportWhiteboardPNG(filePath, dataUrl));
     ipcMain.handle('generate-recording-file', (_event, filePath, recordingId) => generateRecordingFile(filePath, recordingId));
+    ipcMain.handle('export-review-csv', (_event, filePath, filter) => exportReviewCSV(filePath, filter));
+    ipcMain.handle('export-review-text', (_event, filePath, filter) => exportReviewText(filePath, filter));
     
     ipcMain.handle('save-whiteboard', (_event, dataUrl) => saveWhiteboardData(dataUrl));
     ipcMain.handle('get-whiteboard-data', () => getWhiteboardData());

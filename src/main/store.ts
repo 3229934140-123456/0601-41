@@ -22,6 +22,12 @@ export interface Room {
   status: string;
   host: string;
   permission: string;
+  startTime?: string;
+  endTime?: string;
+  topic?: string;
+  notes?: string;
+  groupTasks?: Record<string, string>;
+  discussionMode?: boolean;
 }
 
 export interface RecordingItem {
@@ -72,10 +78,78 @@ export interface AppState {
 
 export const initialState: AppState = {
   rooms: [
-    { id: '1', name: '产品培训会议室', theme: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', description: '产品功能深度培训', capacity: 50, online: 23, participantCount: 23, status: 'active', host: '张老师', permission: 'invite' },
-    { id: '2', name: '新人入职培训厅', theme: 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)', description: '新员工入职培训课程', capacity: 30, online: 15, participantCount: 15, status: 'active', host: '李主管', permission: 'password' },
-    { id: '3', name: '技术分享会', theme: 'linear-gradient(135deg, #2c3e50 0%, #4ca1af 100%)', description: '前沿技术交流分享', capacity: 100, online: 67, participantCount: 67, status: 'active', host: '王工', permission: 'open' },
-    { id: '4', name: '虚拟教室A', theme: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', description: '小组讨论专用教室', capacity: 40, online: 0, participantCount: 0, status: 'inactive', host: '待定', permission: 'invite' },
+    { 
+      id: '1', 
+      name: '产品培训会议室', 
+      theme: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
+      description: '产品功能深度培训', 
+      capacity: 50, 
+      online: 23, 
+      participantCount: 23, 
+      status: 'active', 
+      host: '张老师', 
+      permission: 'invite',
+      startTime: '2026-06-08 14:00',
+      endTime: '2026-06-08 16:00',
+      topic: '新产品功能深度解析',
+      notes: '请提前准备好问题，培训后有QA环节',
+      groupTasks: {},
+      discussionMode: false,
+    },
+    { 
+      id: '2', 
+      name: '新人入职培训厅', 
+      theme: 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)', 
+      description: '新员工入职培训课程', 
+      capacity: 30, 
+      online: 15, 
+      participantCount: 15, 
+      status: 'active', 
+      host: '李主管', 
+      permission: 'password',
+      startTime: '2026-06-08 09:00',
+      endTime: '2026-06-08 12:00',
+      topic: '新员工入职培训',
+      notes: '公司文化、规章制度、流程介绍',
+      groupTasks: {},
+      discussionMode: false,
+    },
+    { 
+      id: '3', 
+      name: '技术分享会', 
+      theme: 'linear-gradient(135deg, #2c3e50 0%, #4ca1af 100%)', 
+      description: '前沿技术交流分享', 
+      capacity: 100, 
+      online: 67, 
+      participantCount: 67, 
+      status: 'active', 
+      host: '王工', 
+      permission: 'open',
+      startTime: '2026-06-08 15:00',
+      endTime: '2026-06-08 17:30',
+      topic: 'AI 技术前沿分享',
+      notes: '开放讨论，欢迎分享想法',
+      groupTasks: {},
+      discussionMode: false,
+    },
+    { 
+      id: '4', 
+      name: '虚拟教室A', 
+      theme: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', 
+      description: '小组讨论专用教室', 
+      capacity: 40, 
+      online: 0, 
+      participantCount: 0, 
+      status: 'inactive', 
+      host: '待定', 
+      permission: 'invite',
+      startTime: '2026-06-09 10:00',
+      endTime: '2026-06-09 11:30',
+      topic: '项目复盘讨论',
+      notes: '下周项目组内讨论',
+      groupTasks: {},
+      discussionMode: false,
+    },
   ],
   currentUser: { id: 'u001', name: '组织者', role: 'host', avatar: '👨‍💼' },
   participants: [

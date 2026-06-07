@@ -25,6 +25,12 @@ export interface Room {
   status: string;
   host: string;
   permission: string;
+  startTime?: string;
+  endTime?: string;
+  topic?: string;
+  notes?: string;
+  groupTasks?: Record<string, string>;
+  discussionMode?: boolean;
 }
 
 export interface RecordingItem {
@@ -105,10 +111,78 @@ export function getGroupNum(group: string): number {
 
 const defaultState: AppState = {
   rooms: [
-    { id: '1', name: '产品培训会议室', theme: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', description: '产品功能深度培训', capacity: 50, online: 23, participantCount: 23, status: 'active', host: '张老师', permission: 'invite' },
-    { id: '2', name: '新人入职培训厅', theme: 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)', description: '新员工入职培训课程', capacity: 30, online: 15, participantCount: 15, status: 'active', host: '李主管', permission: 'password' },
-    { id: '3', name: '技术分享会', theme: 'linear-gradient(135deg, #2c3e50 0%, #4ca1af 100%)', description: '前沿技术交流分享', capacity: 100, online: 67, participantCount: 67, status: 'active', host: '王工', permission: 'open' },
-    { id: '4', name: '虚拟教室A', theme: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', description: '小组讨论专用教室', capacity: 40, online: 0, participantCount: 0, status: 'inactive', host: '待定', permission: 'invite' },
+    { 
+      id: '1', 
+      name: '产品培训会议室', 
+      theme: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
+      description: '产品功能深度培训', 
+      capacity: 50, 
+      online: 23, 
+      participantCount: 23, 
+      status: 'active', 
+      host: '张老师', 
+      permission: 'invite',
+      startTime: '2026-06-08 14:00',
+      endTime: '2026-06-08 16:00',
+      topic: '新产品功能深度解析',
+      notes: '请提前准备好问题，培训后有QA环节',
+      groupTasks: {},
+      discussionMode: false,
+    },
+    { 
+      id: '2', 
+      name: '新人入职培训厅', 
+      theme: 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)', 
+      description: '新员工入职培训课程', 
+      capacity: 30, 
+      online: 15, 
+      participantCount: 15, 
+      status: 'active', 
+      host: '李主管', 
+      permission: 'password',
+      startTime: '2026-06-08 09:00',
+      endTime: '2026-06-08 12:00',
+      topic: '新员工入职培训',
+      notes: '公司文化、规章制度、流程介绍',
+      groupTasks: {},
+      discussionMode: false,
+    },
+    { 
+      id: '3', 
+      name: '技术分享会', 
+      theme: 'linear-gradient(135deg, #2c3e50 0%, #4ca1af 100%)', 
+      description: '前沿技术交流分享', 
+      capacity: 100, 
+      online: 67, 
+      participantCount: 67, 
+      status: 'active', 
+      host: '王工', 
+      permission: 'open',
+      startTime: '2026-06-08 15:00',
+      endTime: '2026-06-08 17:30',
+      topic: 'AI 技术前沿分享',
+      notes: '开放讨论，欢迎分享想法',
+      groupTasks: {},
+      discussionMode: false,
+    },
+    { 
+      id: '4', 
+      name: '虚拟教室A', 
+      theme: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', 
+      description: '小组讨论专用教室', 
+      capacity: 40, 
+      online: 0, 
+      participantCount: 0, 
+      status: 'inactive', 
+      host: '待定', 
+      permission: 'invite',
+      startTime: '2026-06-09 10:00',
+      endTime: '2026-06-09 11:30',
+      topic: '项目复盘讨论',
+      notes: '下周项目组内讨论',
+      groupTasks: {},
+      discussionMode: false,
+    },
   ],
   currentUser: { id: 'u001', name: '组织者', role: 'host', avatar: '👨‍💼' },
   participants: [
@@ -227,16 +301,28 @@ export const storeActions = {
     ipcRenderer.invoke('toggle-mute', id),
   muteAll: () => 
     ipcRenderer.invoke('mute-all'),
-  addRoom: (data: { name: string; theme?: string; capacity?: number; permission?: string }) => 
+  addRoom: (data: { name: string; theme?: string; capacity?: number; permission?: string; startTime?: string; endTime?: string; topic?: string; notes?: string }) => 
     ipcRenderer.invoke('add-room', data),
   setCurrentRoom: (id: string) => 
     ipcRenderer.invoke('set-current-room', id),
+  updateRoom: (id: string, updates: any) => 
+    ipcRenderer.invoke('update-room', id, updates),
+  setDiscussionMode: (roomId: string, group: string, enabled: boolean) => 
+    ipcRenderer.invoke('set-discussion-mode', roomId, group, enabled),
+  setGroupTask: (roomId: string, group: string, task: string) => 
+    ipcRenderer.invoke('set-group-task', roomId, group, task),
+  setCohost: (participantId: string, isCohost: boolean) => 
+    ipcRenderer.invoke('set-cohost', participantId, isCohost),
   addRecording: (data: { name: string; durationSeconds: number }) => 
     ipcRenderer.invoke('add-recording', data),
   deleteRecording: (id: string) => 
     ipcRenderer.invoke('delete-recording', id),
   exportAttendanceCSV: (filePath: string, filter?: { search?: string; group?: string }) => 
     ipcRenderer.invoke('export-attendance-csv', filePath, filter),
+  exportReviewCSV: (filePath: string, filter?: { search?: string; group?: string }) => 
+    ipcRenderer.invoke('export-review-csv', filePath, filter),
+  exportReviewText: (filePath: string, filter?: { search?: string; group?: string }) => 
+    ipcRenderer.invoke('export-review-text', filePath, filter),
   exportWhiteboardPNG: (filePath: string, dataUrl: string) => 
     ipcRenderer.invoke('export-whiteboard-png', filePath, dataUrl),
   generateRecordingFile: (filePath: string, recordingId: string) => 
